@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FarmaGestão — Protótipo</title>
+<style>
+:root{
+  --bg:#EEF6F1;--bg2:#D8ECE1;
+  --surface:#FFFFFF;--surface-glass:rgba(255,255,255,.6);
+  --border:#D6E6DC;--text:#0F2A20;--text2:#5C7568;
+  --accent:#0F6E56;--accent-dark:#0A4E3D;--accentc:#E1F5EE;
+  --danger:#A32D2D;--warn:#8A5A12;
+  --shadow:0 10px 30px -12px rgba(15,60,45,.25)
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1712;--bg2:#132019;--surface:#17231C;--surface-glass:rgba(23,35,28,.65);
+  --border:#243A2E;--text:#E7EFE9;--text2:#8FA79A;--accent:#4FCBA0;--accent-dark:#2E9678;--accentc:#12352A;--shadow:0 10px 30px -12px rgba(0,0,0,.5)
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1712;--bg2:#132019;--surface:#17231C;--surface-glass:rgba(23,35,28,.65);
+  --border:#243A2E;--text:#E7EFE9;--text2:#8FA79A;--accent:#4FCBA0;--accent-dark:#2E9678;--accentc:#12352A;--shadow:0 10px 30px -12px rgba(0,0,0,.5)
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(160deg,var(--bg),var(--bg2));color:var(--text);font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);min-height:100vh}
+.wrap{max-width:1000px;margin:0 auto;padding:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:16px;box-shadow:var(--shadow)}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 18px;font-size:14px;cursor:pointer;font-weight:600;transition:transform .15s ease,opacity .15s ease}
+.btn:hover{opacity:.92}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn.danger{background:var(--danger)}
+.btn.small{padding:6px 12px;font-size:12.5px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;margin-bottom:10px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+label{font-size:13px;color:var(--text2);display:block;margin-bottom:4px}
+.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:8px 16px;border-radius:24px;border:1px solid var(--border);cursor:pointer;font-size:13px;background:var(--surface)}
+.tab.active{background:var(--accentc);color:var(--accent);border-color:var(--accent);font-weight:600}
+.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap}
+.row:last-child{border-bottom:none}
+.badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:12px;color:#fff;font-weight:600}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:480px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap}
+th{color:var(--text2);font-weight:600}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 0;flex-wrap:wrap;gap:8px}
+.muted{color:var(--text2);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.stat .n{font-size:22px;font-weight:700;color:var(--accent-dark)}
+.stat .l{font-size:12px;color:var(--text2);margin-top:2px}
+.overlay{position:fixed;inset:0;background:rgba(10,20,15,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal{background:var(--surface);border-radius:18px;padding:24px;max-width:420px;width:100%;max-height:90vh;overflow:auto;box-shadow:var(--shadow)}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 0 12px}
+.chk input{width:auto;margin:0}
+
+/* ---- Tela de login ---- */
+.hero{position:relative;min-height:100vh;overflow:hidden;display:flex;flex-direction:column}
+.hero-decor{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.hero-decor .blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55}
+.hero-decor .blob1{width:420px;height:420px;left:-140px;bottom:-120px;background:radial-gradient(circle,#6FBE95,#2F8F6B 70%)}
+.hero-decor .blob2{width:260px;height:260px;right:-80px;top:-60px;background:radial-gradient(circle,#B8E6C9,#7FCBA0 70%);opacity:.5}
+.hero-mid{position:relative;z-index:1;flex:1;display:flex;align-items:center;justify-content:center;padding:20px}
+.hero-panel{background:var(--surface-glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.5);border-radius:26px;box-shadow:var(--shadow);padding:38px 34px;max-width:460px;width:100%;text-align:center}
+.hero-panel h1{font-size:28px;margin:0 0 6px;color:var(--accent-dark)}
+.hero-panel .sub{color:var(--text2);margin:0 0 26px;font-size:15px}
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px}
+.role-card{background:var(--surface);border:1.5px solid var(--border);border-radius:18px;padding:20px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px}
+.role-card.active{border-color:var(--accent);background:var(--accentc)}
+.role-card .icon-circle{width:56px;height:56px;border-radius:50%;background:var(--accentc);display:flex;align-items:center;justify-content:center}
+.role-card.active .icon-circle{background:var(--surface)}
+.role-card span{font-weight:600;font-size:14px;color:var(--accent-dark)}
+.hero-form{margin-top:22px;text-align:left}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const produtos=[
+  {nome:'Dipirona 500mg',cat:'Analgésico',estoque:212,min:60,preco:8.90,ctrl:false},
+  {nome:'Amoxicilina 500mg',cat:'Antibiótico',estoque:34,min:50,preco:22.50,ctrl:true},
+  {nome:'Losartana 50mg',cat:'Cardiovascular',estoque:98,min:40,preco:14.30,ctrl:false},
+  {nome:'Clonazepam 2mg',cat:'Ansiolítico',estoque:12,min:20,preco:18.00,ctrl:true},
+  {nome:'Omeprazol 20mg',cat:'Gastro',estoque:71,min:40,preco:9.40,ctrl:false},
+];
+const vendas=[
+  {id:'#3022',data:dataISO(0),cliente:'Marina Alves',itens:[{produto:'Amoxicilina 500mg',quantidade:2},{produto:'Dipirona 500mg',quantidade:3}],canal:'presencial',func:'Rafael Lima',total:71.70,receita:true,receitaInfo:'REC-3410'},
+  {id:'#3021',data:dataISO(0),cliente:'Marina Alves',itens:[{produto:'Dipirona 500mg',quantidade:1}],canal:'presencial',func:'Rafael Lima',total:8.90},
+  {id:'#3020',data:dataISO(0),cliente:'João Pedro Sousa',itens:[{produto:'Amoxicilina 500mg',quantidade:1}],canal:'online',func:'—',total:22.50,receita:true,receitaInfo:'REC-3391'},
+  {id:'#3019',data:dataISO(-1),cliente:'Beatriz Nunes',itens:[{produto:'Losartana 50mg',quantidade:2}],canal:'presencial',func:'Carla Dias',total:28.60},
+  {id:'#3017',data:dataISO(-1),cliente:'Sérgio Matos',itens:[{produto:'Clonazepam 2mg',quantidade:1}],canal:'online',func:'—',total:18.00,receita:true,receitaInfo:'REC-3402'},
+];
+const clientes=[
+  {nome:'Marina Alves',cpf:'111.222.333-44',telefone:'(11) 98211-0032',email:'marina.alves@email.com',endereco:'Rua Tucumã, 210'},
+  {nome:'João Pedro Sousa',cpf:'222.333.444-55',telefone:'(11) 97744-1120',email:'jp.sousa@email.com',endereco:'Av. Paulista, 900'},
+  {nome:'Beatriz Nunes',cpf:'333.444.555-66',telefone:'(11) 96612-8890',email:'bia.nunes@email.com',endereco:'Rua Augusta, 512'},
+  {nome:'Sérgio Matos',cpf:'444.555.666-77',telefone:'(11) 95120-4471',email:'sergio.matos@email.com',endereco:'Rua Oscar Freire, 88'},
+];
+const equipe=[
+  {nome:'Rafael Lima',cpf:'123.456.789-00',telefone:'(11) 91234-5678',email:'rafael.lima@farmagestao.com',endereco:'Rua das Flores, 120',salario:2500,usuario:'rafael.lima',senha:'123456'},
+  {nome:'Carla Dias',cpf:'987.654.321-00',telefone:'(11) 99876-5432',email:'carla.dias@farmagestao.com',endereco:'Av. Central, 45',salario:2500,usuario:'carla.dias',senha:'654321'},
+];
+const fornecedores=[
+  {nome:'MedSul Distribuidora',cnpj:'12.345.678/0001-90',endereco:'Rod. Anhanguera, km 30',email:'contato@medsul.com',telefone:'(11) 4002-1122',prazo:'5 dias úteis'},
+  {nome:'Vita Farma Ltda',cnpj:'98.765.432/0001-10',endereco:'Rua Industrial, 500',email:'vendas@vitafarma.com',telefone:'(11) 4002-3344',prazo:'8 dias úteis'},
+];
+const DATA={produtos,clientes,equipe,fornecedores};
+const LABEL={produtos:'produto',clientes:'cliente',equipe:'funcionário',fornecedores:'fornecedor'};
+const FIELDS={
+  produtos:[{k:'nome',l:'Nome',t:'text'},{k:'cat',l:'Categoria',t:'text'},{k:'preco',l:'Preço (R$)',t:'number'},{k:'estoque',l:'Estoque',t:'number'},{k:'min',l:'Estoque mínimo',t:'number'},{k:'ctrl',l:'Medicamento controlado (exige receita)',t:'checkbox'}],
+  clientes:[{k:'nome',l:'Nome',t:'text'},{k:'cpf',l:'CPF',t:'text'},{k:'telefone',l:'Telefone',t:'tel'},{k:'email',l:'E-mail',t:'email'},{k:'endereco',l:'Endereço',t:'text'}],
+  equipe:[{k:'nome',l:'Nome completo',t:'text'},{k:'cpf',l:'CPF',t:'text'},{k:'telefone',l:'Telefone',t:'tel'},{k:'email',l:'E-mail',t:'email'},{k:'endereco',l:'Endereço',t:'text'},{k:'salario',l:'Salário (R$)',t:'number'}],
+  fornecedores:[{k:'nome',l:'Razão social / nome fantasia',t:'text'},{k:'cnpj',l:'CNPJ',t:'text'},{k:'endereco',l:'Endereço',t:'text'},{k:'email',l:'E-mail',t:'email'},{k:'telefone',l:'Telefone de contato',t:'tel'},{k:'prazo',l:'Prazo de entrega',t:'text'}],
+};
+
+let user=null,tela='login',loginTab='colab',loginError=null,gestorTab='dashboard',colabTab='vendas',modal=null,vendasPeriodo='todos';
+const gestorContas=[{usuario:'gestor1',senha:'123456'}];
+
+function formatBRL(n){return 'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function dataISO(offsetDias){const d=new Date();d.setDate(d.getDate()+(offsetDias||0));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function fmtData(s){return s===dataISO(0)?'Hoje':s.split('-').reverse().slice(0,2).join('/')}
+function badge(text,cor){return `<span class="badge" style="background:${cor}">${text}</span>`}
+function badgeCanal(c){return badge(c[0].toUpperCase()+c.slice(1), c==='online'?'#2C5C82':'#B8863B')}
+function badgeEstoque(p){return p.estoque<p.min?badge('Repor','var(--danger)'):badge('Normal','var(--accent)')}
+function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').trim().replace(/\s+/g,'.')||'usuario'}
+function genSenha(){return String(Math.floor(100000+Math.random()*900000))}
+
+function tentarLogin(role){
+  const u=document.getElementById(role+'User').value.trim();
+  const p=document.getElementById(role+'Pass').value;
+  if(role==='gestor'){
+    const c=gestorContas.find(c=>c.usuario===u);
+    if(!c){loginError='Usuário incorreto';render();return}
+    if(c.senha!==p){loginError='Senha incorreta';render();return}
+    loginError=null;user={role:'gestor'};tela='gestor';render();
+  }else{
+    const emp=equipe.find(e=>e.usuario===u);
+    if(!emp){loginError='Usuário incorreto';render();return}
+    if(emp.senha!==p){loginError='Senha incorreta';render();return}
+    loginError=null;user={role:'colab',emp};tela='colab';render();
+  }
+}
+function logout(){user=null;tela='login';loginError=null;render()}
+
+function openModal(entity,index){modal={entity,index:index==null?null:index};render()}
+function openVenda(){
+  if(!produtos.length){modal={message:'Cadastre ao menos um produto antes de registrar vendas.'};render();return}
+  modal={venda:{cliente:'Cliente balcão',canal:'presencial',receita:'',erro:null,itens:[{produto:produtos[0].nome,qtd:1}]}};render();
+}
+function closeModal(){modal=null;render()}
+function removeItem(entity,index){modal={removeConfirm:{entity,index}};render()}
+function confirmRemove(){const{entity,index}=modal.removeConfirm;DATA[entity].splice(index,1);modal=null;render()}
+function saveModal(){
+  const cfg=FIELDS[modal.entity],arr=DATA[modal.entity],isNew=modal.index==null,obj={};
+  cfg.forEach(f=>{const el=document.getElementById('f_'+f.k);obj[f.k]=f.t==='checkbox'?el.checked:(f.t==='number'?Number(el.value):el.value.trim())});
+  if(isNew && modal.entity==='equipe'){obj.usuario=slug(obj.nome);obj.senha=genSenha()}
+  if(isNew)arr.push(obj);else Object.assign(arr[modal.index],obj);
+  const ent=modal.entity;
+  if(isNew && ent==='equipe')modal={message:`Funcionário cadastrado!\nUsuário: ${obj.usuario}\nSenha: ${obj.senha}`};
+  else modal=null;
+  render();
+}
+function syncVenda(){
+  const v=modal.venda;
+  v.cliente=document.getElementById('vCliente').value;
+  v.canal=document.getElementById('vCanal').value;
+  const r=document.getElementById('vReceita');if(r)v.receita=r.value;
+  v.itens=[...document.querySelectorAll('.vItem')].map(row=>({produto:row.querySelector('.vProd').value,qtd:Math.max(1,Number(row.querySelector('.vQtd').value)||1)}));
+}
+function addItemVenda(){syncVenda();modal.venda.itens.push({produto:produtos[0].nome,qtd:1});render()}
+function removeItemVenda(i){syncVenda();modal.venda.itens.splice(i,1);render()}
+function atualizaTotal(){
+  let t=0;
+  document.querySelectorAll('.vItem').forEach(r=>{const p=produtos.find(p=>p.nome===r.querySelector('.vProd').value);t+=(p?p.preco:0)*Math.max(1,Number(r.querySelector('.vQtd').value)||1)});
+  document.getElementById('vTotal').textContent=formatBRL(t);
+}
+function saveVenda(){
+  syncVenda();
+  const v=modal.venda,map={};
+  v.itens.forEach(i=>map[i.produto]=(map[i.produto]||0)+i.qtd);
+  const itens=Object.entries(map).map(([nome,quantidade])=>({produto:nome,quantidade,preco:produtos.find(p=>p.nome===nome).preco}));
+  const temCtrl=itens.some(i=>produtos.find(p=>p.nome===i.produto).ctrl);
+  let receitaInfo=null;
+  if(temCtrl){
+    receitaInfo=(v.receita||'').trim();
+    if(v.cliente==='Cliente balcão'){v.erro='Medicamentos controlados exigem um cliente cadastrado vinculado à receita — selecione o cliente.';render();return}
+    if(!receitaInfo){v.erro='Informe o número da receita médica para medicamentos controlados.';render();return}
+  }
+  itens.forEach(i=>{const p=produtos.find(p=>p.nome===i.produto);p.estoque=Math.max(0,p.estoque-i.quantidade)});
+  const total=itens.reduce((s,i)=>s+i.preco*i.quantidade,0);
+  const proximo=Math.max(3000,...vendas.map(x=>Number(x.id.slice(1))))+1;
+  vendas.unshift({id:'#'+proximo,data:dataISO(0),cliente:v.cliente,itens,canal:v.canal,func:user.emp.nome,total,receita:temCtrl,receitaInfo});
+  modal=null;render();
+}
+function salvarConta(){
+  const u=document.getElementById('ctUser').value.trim(),p=document.getElementById('ctPass').value;
+  if(!u){modal={message:'Informe um usuário.'};render();return}
+  user.emp.usuario=u;if(p)user.emp.senha=p;
+  modal={message:'Dados de acesso atualizados.'};render();
+}
+
+const ICON_COLAB=`<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-dark)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>`;
+const ICON_GESTOR=`<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-dark)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 6v5c0 5 4 8.5 9 11 5-2.5 9-6 9-11V6l-9-4Z"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+function telaLogin(){
+  const du=loginTab==='colab'?equipe[0].usuario:gestorContas[0].usuario;
+  const dp=loginTab==='colab'?equipe[0].senha:gestorContas[0].senha;
+  return `<div class="hero"><div class="hero-decor"><div class="blob blob1"></div><div class="blob blob2"></div></div>
+  <div class="hero-mid"><div class="hero-panel">
+    <h1>FarmaGestão</h1><p class="sub">Você é um...</p>
+    <div class="role-grid">
+      <div class="role-card ${loginTab==='colab'?'active':''}" onclick="loginTab='colab';loginError=null;render()"><div class="icon-circle">${ICON_COLAB}</div><span>Colaborador</span></div>
+      <div class="role-card ${loginTab==='gestor'?'active':''}" onclick="loginTab='gestor';loginError=null;render()"><div class="icon-circle">${ICON_GESTOR}</div><span>Gestor</span></div>
+    </div>
+    <div class="hero-form">
+      <label>Usuário</label><input id="${loginTab}User" value="${du}">
+      <label>Senha</label><input id="${loginTab}Pass" type="password" value="${dp}">
+      <button class="btn" style="width:100%" onclick="tentarLogin('${loginTab}')">Entrar</button>
+      ${loginError?`<p style="color:var(--danger);font-size:13px;text-align:center;margin-top:10px">${loginError}</p>`:''}
+    </div>
+  </div></div></div>`;
+}
+
+function screenDashboard(){
+  const hoje=vendas.filter(v=>v.data===dataISO(0));
+  const totalHoje=hoje.reduce((s,v)=>s+v.total,0);
+  const itensHoje=hoje.reduce((s,v)=>s+v.itens.reduce((a,i)=>a+i.quantidade,0),0);
+  return `<div class="stats">
+    <div class="stat"><div class="n">${formatBRL(totalHoje)}</div><div class="l">Vendas hoje · ${hoje.length} ${hoje.length===1?'venda':'vendas'}</div></div>
+    <div class="stat"><div class="n">${itensHoje}</div><div class="l">Itens vendidos hoje</div></div>
+    <div class="stat"><div class="n">${produtos.filter(p=>p.estoque<p.min).length}</div><div class="l">Produtos abaixo do mínimo</div></div>
+    <div class="stat"><div class="n">${equipe.length}</div><div class="l">Funcionários ativos</div></div>
+  </div>
+  <div class="card"><p><strong>Estoque em atenção</strong></p><div class="tablewrap"><table><tr><th>Produto</th><th>Estoque</th><th>Mínimo</th><th>Status</th></tr>
+  ${produtos.filter(p=>p.estoque<p.min).map(p=>`<tr><td>${p.nome}</td><td>${p.estoque}</td><td>${p.min}</td><td>${badgeEstoque(p)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Tudo normal</td></tr>'}
+  </table></div></div>`;
+}
+function screenVendas(canSell){
+  const filtradas=vendasPeriodo==='hoje'?vendas.filter(v=>v.data===dataISO(0)):vendas;
+  const porMed={};filtradas.forEach(v=>v.itens.forEach(i=>porMed[i.produto]=(porMed[i.produto]||0)+i.quantidade));
+  const linhas=Object.entries(porMed).sort((a,b)=>b[1]-a[1]);
+  const totalQtd=linhas.reduce((s,[,q])=>s+q,0);
+  return `${canSell?`<button class="btn" onclick="openVenda()">Nova venda</button><div style="height:12px"></div>`:''}
+  <div class="card"><p><strong>Vendas</strong></p><div class="tablewrap"><table><tr><th>Venda</th><th>Data</th><th>Cliente</th><th>Produtos</th><th>Canal</th><th>Atendente</th><th>Total</th></tr>
+  ${vendas.map(v=>`<tr><td>${v.id}${v.receita?' '+badge(v.receitaInfo||'Receita','var(--warn)'):''}</td><td>${fmtData(v.data)}</td><td>${v.cliente}</td><td style="white-space:normal;min-width:170px">${v.itens.map(i=>`${i.quantidade}× ${i.produto}`).join('<br>')}</td><td>${badgeCanal(v.canal)}</td><td>${v.func}</td><td>${formatBRL(v.total)}</td></tr>`).join('')}
+  </table></div></div>
+  <div class="card"><div class="row" style="border:none;padding-top:0"><strong>Quantidade vendida por medicamento</strong>
+  <div class="tabs" style="margin:0"><div class="tab ${vendasPeriodo==='hoje'?'active':''}" onclick="vendasPeriodo='hoje';render()">Hoje</div><div class="tab ${vendasPeriodo==='todos'?'active':''}" onclick="vendasPeriodo='todos';render()">Todo o período</div></div></div>
+  <table><tr><th>Medicamento</th><th>Qtd. vendida</th></tr>
+  ${linhas.map(([n,q])=>`<tr><td>${n}</td><td>${q}</td></tr>`).join('')||'<tr><td colspan="2" class="muted">Nenhuma venda no período</td></tr>'}
+  ${linhas.length?`<tr><td><strong>Total</strong></td><td><strong>${totalQtd}</strong></td></tr>`:''}
+  </table></div>`;
+}
+function screenEstoque(){
+  return `<div class="card"><div class="tablewrap"><table><tr><th>Produto</th><th>Categoria</th><th>Estoque</th><th>Mínimo</th><th>Status</th></tr>
+  ${produtos.map(p=>`<tr><td>${p.nome}</td><td>${p.cat}</td><td>${p.estoque}</td><td>${p.min}</td><td>${badgeEstoque(p)}</td></tr>`).join('')}
+  </table></div></div>`;
+}
+function screenProdutos(){
+  return `<button class="btn" onclick="openModal('produtos')">Novo produto</button><div style="height:12px"></div>
+  <div class="card"><div class="tablewrap"><table><tr><th>Produto</th><th>Categoria</th><th>Preço</th><th>Controlado</th><th></th></tr>
+  ${produtos.map((p,i)=>`<tr><td>${p.nome}</td><td>${p.cat}</td><td>${formatBRL(p.preco)}</td><td>${p.ctrl?badge('Sim','var(--danger)'):'—'}</td><td><button class="btn small secondary" onclick="openModal('produtos',${i})">Editar</button> <button class="btn small danger" onclick="removeItem('produtos',${i})">Remover</button></td></tr>`).join('')}
+  </table></div></div>`;
+}
+function screenClientes(canManage){
+  return `${canManage?`<button class="btn" onclick="openModal('clientes')">Novo cliente</button><div style="height:12px"></div>`:''}
+  <div class="card"><div class="tablewrap"><table><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th>Endereço</th>${canManage?'<th></th>':''}</tr>
+  ${clientes.map((c,i)=>`<tr><td>${c.nome}</td><td>${c.cpf||'—'}</td><td>${c.telefone}</td><td>${c.email||'—'}</td><td>${c.endereco||'—'}</td>${canManage?`<td><button class="btn small secondary" onclick="openModal('clientes',${i})">Editar</button> <button class="btn small danger" onclick="removeItem('clientes',${i})">Remover</button></td>`:''}</tr>`).join('')}
+  </table></div></div>`;
+}
+function screenEquipe(){
+  return `<button class="btn" onclick="openModal('equipe')">Adicionar funcionário</button><div style="height:12px"></div>
+  <div class="card"><div class="tablewrap"><table><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>Salário</th><th>Usuário</th><th></th></tr>
+  ${equipe.map((e,i)=>`<tr><td>${e.nome}</td><td>${e.cpf}</td><td>${e.telefone}</td><td>${e.salario?formatBRL(e.salario):'—'}</td><td>${e.usuario}</td><td><button class="btn small secondary" onclick="openModal('equipe',${i})">Editar</button> <button class="btn small danger" onclick="removeItem('equipe',${i})">Remover</button></td></tr>`).join('')}
+  </table></div></div>`;
+}
+function screenFornecedores(){
+  return `<button class="btn" onclick="openModal('fornecedores')">Novo fornecedor</button><div style="height:12px"></div>
+  <div class="card"><div class="tablewrap"><table><tr><th>Fornecedor</th><th>CNPJ</th><th>Telefone</th><th>Prazo</th><th></th></tr>
+  ${fornecedores.map((f,i)=>`<tr><td>${f.nome}</td><td>${f.cnpj}</td><td>${f.telefone}</td><td>${f.prazo}</td><td><button class="btn small secondary" onclick="openModal('fornecedores',${i})">Editar</button> <button class="btn small danger" onclick="removeItem('fornecedores',${i})">Remover</button></td></tr>`).join('')}
+  </table></div></div>`;
+}
+function screenConta(){
+  const e=user.emp;
+  return `<div class="card"><p><strong>Meus dados de acesso</strong></p>
+  <label>Usuário</label><input id="ctUser" value="${e.usuario}">
+  <label>Nova senha</label><input id="ctPass" type="password" placeholder="Deixe em branco para manter a atual">
+  <button class="btn" onclick="salvarConta()">Salvar alterações</button></div>`;
+}
+
+function renderModal(){
+  if(!modal)return'';
+  if(modal.message){
+    return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="text-align:center">
+    <p style="white-space:pre-line;margin:0 0 18px">${modal.message}</p>
+    <button class="btn" onclick="closeModal()">OK</button>
+    </div></div>`;
+  }
+  if(modal.removeConfirm){
+    const{entity,index}=modal.removeConfirm,item=DATA[entity][index];
+    return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="text-align:center">
+    <h3 style="margin:0 0 10px">Remover ${LABEL[entity]}?</h3>
+    <p class="muted" style="margin:0 0 18px">Tem certeza que deseja remover <strong>${item.nome}</strong>? Essa ação não pode ser desfeita.</p>
+    <div style="display:flex;gap:10px;justify-content:center"><button class="btn danger" onclick="confirmRemove()">Remover</button><button class="btn secondary" onclick="closeModal()">Cancelar</button></div>
+    </div></div>`;
+  }
+  if(modal.venda){
+    const v=modal.venda,preco=n=>{const p=produtos.find(p=>p.nome===n);return p?p.preco:0};
+    const temCtrl=v.itens.some(i=>{const p=produtos.find(p=>p.nome===i.produto);return p&&p.ctrl});
+    const total=v.itens.reduce((s,i)=>s+preco(i.produto)*i.qtd,0);
+    return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:480px">
+    <h3 style="margin:0 0 14px">Nova venda</h3>
+    <label>Cliente</label><select id="vCliente"><option ${v.cliente==='Cliente balcão'?'selected':''}>Cliente balcão</option>${clientes.map(c=>`<option ${c.nome===v.cliente?'selected':''}>${c.nome}</option>`).join('')}</select>
+    <label>Canal</label><select id="vCanal"><option value="presencial" ${v.canal==='presencial'?'selected':''}>Presencial</option><option value="online" ${v.canal==='online'?'selected':''}>Online</option></select>
+    <label>Produtos</label>
+    ${v.itens.map((it,i)=>`<div class="vItem" style="display:flex;gap:8px;align-items:flex-start"><select class="vProd" style="flex:1;width:auto;min-width:0" onchange="syncVenda();render()">${produtos.map(p=>`<option ${p.nome===it.produto?'selected':''}>${p.nome}</option>`).join('')}</select><input class="vQtd" type="number" min="1" value="${it.qtd}" style="width:72px" oninput="atualizaTotal()"><button class="btn small danger" style="margin-top:3px" onclick="removeItemVenda(${i})" ${v.itens.length<2?'disabled':''}>✕</button></div>`).join('')}
+    <button class="btn small secondary" style="margin-bottom:14px" onclick="addItemVenda()">+ Adicionar produto</button>
+    ${temCtrl?`<label>Nº da receita médica</label><input id="vReceita" placeholder="Ex: 12345-SP" value="${(v.receita||'').replace(/"/g,'&quot;')}"><p class="muted" style="margin:-4px 0 10px">Há medicamento controlado na venda — selecione um cliente cadastrado (não "Cliente balcão").</p>`:''}
+    <p style="margin:0 0 6px"><strong>Total: <span id="vTotal">${formatBRL(total)}</span></strong></p>
+    ${v.erro?`<p style="color:var(--danger);font-size:13px;margin:0 0 6px">${v.erro}</p>`:''}
+    <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="saveVenda()">Registrar venda</button><button class="btn secondary" onclick="closeModal()">Cancelar</button></div>
+    </div></div>`;
+  }
+  const cfg=FIELDS[modal.entity],item=modal.index!=null?DATA[modal.entity][modal.index]:{};
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  <h3 style="margin:0 0 14px">${modal.index!=null?'Editar':'Novo(a)'} ${LABEL[modal.entity]}</h3>
+  ${cfg.map(f=>f.t==='checkbox'?`<div class="chk"><input type="checkbox" id="f_${f.k}" ${item[f.k]?'checked':''}><label style="margin:0" for="f_${f.k}">${f.l}</label></div>`:`<label>${f.l}</label><input id="f_${f.k}" type="${f.t}" value="${item[f.k]!=null?item[f.k]:''}">`).join('')}
+  <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="saveModal()">Salvar</button><button class="btn secondary" onclick="closeModal()">Cancelar</button></div>
+  </div></div>`;
+}
+
+function telaGestor(){
+  const tabs=[['dashboard','Visão geral'],['vendas','Vendas'],['estoque','Estoque'],['produtos','Produtos'],['clientes','Clientes'],['equipe','Equipe'],['fornecedores','Fornecedores']];
+  const R={dashboard:screenDashboard,vendas:()=>screenVendas(false),estoque:screenEstoque,produtos:screenProdutos,clientes:()=>screenClientes(false),equipe:screenEquipe,fornecedores:screenFornecedores};
+  return `<div class="wrap"><div class="topbar"><strong>Gestor(a)</strong><button class="btn small" onclick="logout()">Sair</button></div>
+  <div class="tabs">${tabs.map(([k,l])=>`<div class="tab ${gestorTab===k?'active':''}" onclick="gestorTab='${k}';render()">${l}</div>`).join('')}</div>
+  ${R[gestorTab]()}</div>${renderModal()}`;
+}
+function telaColab(){
+  const tabs=[['vendas','Vendas'],['clientes','Clientes'],['estoque','Estoque'],['conta','Minha conta']];
+  const R={vendas:()=>screenVendas(true),clientes:()=>screenClientes(true),estoque:screenEstoque,conta:screenConta};
+  return `<div class="wrap"><div class="topbar"><strong>${user.emp.nome}</strong><button class="btn small" onclick="logout()">Sair</button></div>
+  <div class="tabs">${tabs.map(([k,l])=>`<div class="tab ${colabTab===k?'active':''}" onclick="colabTab='${k}';render()">${l}</div>`).join('')}</div>
+  ${R[colabTab]()}</div>${renderModal()}`;
+}
+function render(){
+  const app=document.getElementById('app');
+  if(tela==='login')app.innerHTML=telaLogin();
+  else if(tela==='gestor')app.innerHTML=telaGestor();
+  else app.innerHTML=telaColab();
+}
+render();
+</script>
+</body>
+</html>
