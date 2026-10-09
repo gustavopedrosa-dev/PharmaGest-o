@@ -40,7 +40,7 @@ O **cliente** é um registro mantido pela farmácia (nome, CPF, contato, endere�
 
 **Dentro do escopo inicial:** login por perfil (gestor e colaborador); painel do gestor; cadastro e manutenção de produtos, clientes, funcionários e fornecedores; registro de vendas com canal presencial ou online e forma de pagamento (dinheiro, cartão ou Pix); baixa automática de estoque; bloqueio de venda sem estoque suficiente; alerta de estoque abaixo do mínimo; exigência de receita para controlados; relatório simples de quantidade vendida por medicamento.
 
-**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado de receitas médicas.
+**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado de receitas médicas
 
 ## 6. Principais funcionalidades
 
@@ -55,7 +55,7 @@ Os colaboradores poderão registrar vendas escolhendo cliente, canal, forma de p
 | Estoque | Consulta | Consulta |
 | Produtos | Cadastra, edita e remove | Não acessa |
 | Clientes | Consulta | Cadastra, edita e inativa |
-| Equipe | Cadastra, edita e remove | Não acessa |
+| Equipe | Cadastra, edita e inativa | Não acessa |
 | Fornecedores | Cadastra, edita e remove | Não acessa |
 | Minha conta | Não possui | Altera usuário e senha |
 
@@ -92,7 +92,7 @@ Os aspectos mais críticos do sistema são o controle de acesso, a integridade d
 
 As permissões por perfil devem ser aplicadas no backend (Xano), e não apenas escondidas na interface. Senhas devem ser armazenadas com hash. O protótipo mostra senhas em texto puro e pré-preenchidas na tela de login, o que vale somente como demonstração.
 
-Dados pessoais (CPF, telefone, endereço) e salários exigem cuidado de acesso e devem ser expostos só a quem precisa. Venda com controlado deve manter o vínculo entre cliente, receita e atendente. Vendas registradas não são editadas nem removidas pelas telas, para preservar o histórico. A validação de estoque deve acontecer no backend, no momento de registrar a venda, para que vendas simultâneas não deixem o estoque negativo. Como clientes estão ligados a vendas, eles não são apagados, e sim inativados. A mesma abordagem deve ser avaliada para produtos, funcionários e fornecedores.
+Dados pessoais (CPF, telefone, endereço) e salários exigem cuidado de acesso e devem ser expostos só a quem precisa. Venda com controlado deve manter o vínculo entre cliente, receita e atendente. Vendas registradas não são editadas nem removidas pelas telas, para preservar o histórico. A validação de estoque deve acontecer no backend, no momento de registrar a venda, para que vendas simultâneas não deixem o estoque negativo. Como clientes estão ligados a vendas, eles não são apagados, e sim inativados. A mesma abordagem deve ser avaliada para funcionários.
 
 ## 11. Estratégia de desenvolvimento
 
