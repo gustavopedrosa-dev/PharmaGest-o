@@ -1,0 +1,50 @@
+# AGENTS.md
+
+Instruções para os agentes de IA que trabalham no FarmaGestão. O `docs/project-overview.md` explica o projeto. Este arquivo explica como o agente deve atuar dentro dele.
+
+## Documentação
+
+Antes de realizar alterações significativas, consultar os documentos de contexto do projeto:
+
+- `docs/project-overview.md`: visão, escopo, perfis de acesso e regras principais.
+- `docs/domain-model.md`: entidades, relacionamentos e regras estruturais.
+- `docs/prototipo/farmagestao-prototipo.html`: referência visual das telas e das permissões de cada perfil.
+
+Em caso de divergência, o `domain-model.md` e as especificações do OpenSpec prevalecem nos detalhes, o `project-overview.md` prevalece sobre o protótipo, e o banco no Xano é a fonte de verdade da estrutura de dados. O protótipo não implementa o bloqueio de venda por estoque, a inativação de clientes nem a forma de pagamento.
+
+Não duplicar a documentação neste arquivo nem nas especificações. Referenciar o documento de origem.
+
+## Arquitetura
+
+- Respeitar as tecnologias definidas no projeto: Xano (backend e banco de dados) e Reflex (frontend em Python).
+- Não introduzir tecnologias alternativas sem justificativa.
+- O estoque fica no próprio produto (quantidade em estoque e estoque mínimo) e é reduzido diretamente pela venda.
+- Não usar as tabelas `lote`, `pedido_compra`, `item_pedido_compra` e `movimentacao_estoque`, que estão fora do escopo inicial.
+- Seguir os nomes de entidades e campos do modelo de dados, em português.
+
+## Código
+
+- Reutilizar código existente quando apropriado e evitar duplicação.
+- Não modificar funcionalidades não relacionadas à mudança atual sem justificativa.
+- Manter mudanças pequenas e incrementais.
+- Clientes e usuários de funcionários não são apagados, e sim inativados.
+
+## Segurança
+
+- Regras de autorização por perfil (gestor e colaborador) devem ser aplicadas no backend, e não apenas escondidas na interface.
+- Regras de negócio, como bloqueio de venda sem estoque suficiente e exigência de receita para controlados, são validadas no backend. O frontend apenas apresenta o resultado.
+- Senhas são armazenadas com hash. Nunca versionar credenciais reais.
+- Salários e dados pessoais só são expostos a quem tem permissão.
+
+## Desenvolvimento
+
+- Mudanças devem utilizar OpenSpec: Explore, Propose, Review, Apply e Archive.
+- As changes são verticais: cada uma entrega uma funcionalidade completa (Xano e Reflex) e pode ser testada isoladamente, sem quebrar o que já funciona.
+- Ajustes de banco são aditivos e limitados ao que a change precisa: campos novos opcionais ou com valor padrão, sem apagar nem alterar o que outras changes usam.
+- Trabalhar em um branch do Git por change e integrar somente depois da verificação.
+- Implementar apenas o que está especificado na change em andamento.
+
+## Testes
+
+- Mudanças funcionais devem possuir estratégia de verificação, definida na especificação da change.
+- Verificar ao menos os fluxos críticos: permissões por perfil, venda bloqueada sem estoque suficiente e venda de controlado sem receita.

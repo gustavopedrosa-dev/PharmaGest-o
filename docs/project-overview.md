@@ -40,7 +40,7 @@ O **cliente** é um registro mantido pela farmácia (nome, CPF, contato, endere�
 
 **Dentro do escopo inicial:** login por perfil (gestor e colaborador); painel do gestor; cadastro e manutenção de produtos, clientes, funcionários e fornecedores; registro de vendas com canal presencial ou online e forma de pagamento (dinheiro, cartão ou Pix); baixa automática de estoque; bloqueio de venda sem estoque suficiente; alerta de estoque abaixo do mínimo; exigência de receita para controlados; relatório simples de quantidade vendida por medicamento.
 
-**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado de receitas médicas
+**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado de receitas médicas.
 
 ## 6. Principais funcionalidades
 
@@ -96,13 +96,26 @@ Dados pessoais (CPF, telefone, endereço) e salários exigem cuidado de acesso e
 
 ## 11. Estratégia de desenvolvimento
 
-Depois da documentação base, o desenvolvimento é dividido em duas changes do OpenSpec, cada uma com seu próprio ciclo (Explore, Propose, Review, Apply, Archive).
+O desenvolvimento é feito em changes verticais do OpenSpec. Cada change entrega uma funcionalidade completa, do banco e da API no Xano até a tela no Reflex, e pode ser testada isoladamente sem afetar o que já funciona. Cada uma segue o ciclo Explore, Propose, Review, Apply e Archive.
+
+Toda change deve ser:
+
+- **Pequena e independente:** entrega um fluxo que o usuário consegue executar e verificar do início ao fim.
+- **Aditiva no banco:** altera apenas o que ela precisa, com campos novos opcionais ou com valor padrão, sem apagar nem mudar o que outras changes usam.
+- **Isolada:** desenvolvida em um branch do Git e testada com dados de teste, e só integrada à versão principal depois de verificada.
+- **Verificável:** traz na especificação seus próprios cenários de verificação.
+
+Ordem sugerida:
 
 1. Preparar a documentação base: este overview, `docs/domain-model.md`, `AGENTS.md` e `openspec/config.yaml`.
-2. **Change de backend (Xano):** autenticação e perfis de acesso (gestor e colaborador) aplicados na API; endpoints de produtos, clientes, vendas, equipe e fornecedores, além dos dados do painel; regras de negócio, que são o bloqueio de venda sem estoque suficiente, a baixa automática de estoque, a exigência de cliente cadastrado e receita para controlados e a inativação de clientes (com um campo de status no cliente, se ainda não existir).
-3. **Change de design (frontend em Reflex):** telas de login, painel do gestor, vendas, estoque, produtos, clientes, equipe, fornecedores e minha conta, seguindo o protótipo; exibição das mensagens das regras (estoque insuficiente, receita obrigatória) e de clientes inativos; integração com a API entregue pela change de backend. O design pode começar em paralelo com base no protótipo, mas só é concluído quando a API estiver disponível.
-4. Versionar no GitHub a cada change concluída e arquivada.
-5. Reavaliar o escopo ao final, considerando itens como lotes, pedidos de compra e histórico de movimentação de estoque.
+2. **Acesso e perfis:** login, proteção por perfil aplicada na API e menu por perfil (gestor e colaborador).
+3. **Fornecedores:** o gestor cadastra, edita e remove fornecedores. Banco: prazo de entrega.
+4. **Produtos e estoque:** o gestor cadastra produtos e categorias, e ambos os perfis consultam o estoque, com alerta de reposição. Banco: quantidade em estoque e estoque mínimo.
+5. **Clientes:** o colaborador cadastra, edita e inativa clientes e seus endereços. Banco: situação do cliente.
+6. **Vendas:** o colaborador registra pedido, venda e pagamento, com bloqueio por estoque, baixa automática e regras de controlados com receita. Depende de produtos e clientes. Banco: canal.
+7. **Equipe e minha conta:** o gestor cadastra funcionários, com usuário e senha gerados, e os inativa. O colaborador altera o próprio usuário e senha. Banco: salário.
+8. **Painel do gestor:** vendas e itens do dia, produtos abaixo do mínimo, funcionários ativos e quantidade vendida por medicamento. Depende de vendas.
+9. Reavaliar o escopo ao final, considerando itens como lotes, pedidos de compra e histórico de movimentação de estoque.
 
 ## 12. Fonte de verdade e documentação
 
