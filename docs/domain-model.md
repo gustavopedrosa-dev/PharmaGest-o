@@ -81,7 +81,7 @@ Um funcionário possui um usuário de acesso. Um funcionário pode registrar vá
 ### Regras estruturais
 
 - O CPF é único.
-- Somente o gestor cadastra, edita e remove funcionários.
+- Somente o gestor cadastra, edita e inativa funcionários.
 - Ao cadastrar um funcionário, o usuário e a senha de acesso são gerados.
 - O salário é visível apenas ao gestor.
 - Como o histórico de pedidos guarda quem atendeu, a saída de um funcionário é registrada inativando o usuário.
@@ -163,6 +163,7 @@ Uma categoria possui vários produtos. Um produto pertence a uma única categori
 ### Regras estruturais
 
 - Todo produto tem categoria.
+- Somente o gestor cadastra, edita e remove categorias.
 
 ## Fornecedor
 
@@ -259,6 +260,7 @@ Um pedido pertence a um cliente (quando houver) e é registrado por um funcioná
 - O mesmo produto aparece uma única vez no pedido: quantidades repetidas são somadas.
 - A quantidade de cada item não pode ser maior que o estoque disponível do produto.
 - Toda venda identifica o canal e o atendente, que vêm do pedido.
+- O atendente é o colaborador que registra o pedido, inclusive quando o canal é online.
 
 ## Venda
 
@@ -322,6 +324,7 @@ Garantir a rastreabilidade das vendas de controlados, ligando o medicamento vend
 
 ### Principais informações
 
+- número da receita (ainda não existe no banco);
 - cliente;
 - nome do médico;
 - CRM do médico;
@@ -341,8 +344,9 @@ Uma receita pertence a um cliente, e um cliente pode ter várias receitas. Uma r
 
 ### Regras estruturais
 
-- Venda com medicamento controlado exige receita.
-- O cadastro detalhado dos itens da receita (dosagem, posologia, quantidade prescrita) fica fora do escopo inicial. O essencial é registrar a receita e vinculá-la ao item vendido.
+- Venda com medicamento controlado exige receita com número informado.
+- Ao vender um controlado, registra-se a receita (número e cliente) e, para cada produto controlado, um item da receita mínimo (produto e quantidade), para o qual o item do pedido aponta.
+- Médico, CRM, datas de emissão e validade, dosagem e posologia não são exigidos no escopo inicial. Esses campos devem ser opcionais.
 
 ## Conceitos fora do escopo inicial
 

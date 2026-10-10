@@ -10,7 +10,7 @@ Antes de realizar alterações significativas, consultar os documentos de contex
 - `docs/domain-model.md`: entidades, relacionamentos e regras estruturais.
 - `docs/prototipo/farmagestao-prototipo.html`: referência visual das telas e das permissões de cada perfil.
 
-Em caso de divergência, o `domain-model.md` e as especificações do OpenSpec prevalecem nos detalhes, o `project-overview.md` prevalece sobre o protótipo, e o banco no Xano é a fonte de verdade da estrutura de dados. O protótipo não implementa o bloqueio de venda por estoque, a inativação de clientes nem a forma de pagamento.
+Em caso de divergência, o `domain-model.md` e as especificações do OpenSpec prevalecem nos detalhes, o `project-overview.md` prevalece sobre o protótipo, e o banco no Xano é a fonte de verdade da estrutura de dados. O protótipo difere do escopo em alguns pontos: não bloqueia venda sem estoque, remove clientes e funcionários em vez de inativá-los, não tem forma de pagamento, trata a categoria como texto livre, guarda um endereço único por cliente, não identifica atendente nas vendas online e usa uma conta fixa para o gestor (no modelo, o gestor é um funcionário). Nesses pontos, seguir o overview e o domain-model.
 
 Não duplicar a documentação neste arquivo nem nas especificações. Referenciar o documento de origem.
 

@@ -40,11 +40,11 @@ O **cliente** é um registro mantido pela farmácia (nome, CPF, contato, endere�
 
 **Dentro do escopo inicial:** login por perfil (gestor e colaborador); painel do gestor; cadastro e manutenção de produtos, clientes, funcionários e fornecedores; registro de vendas com canal presencial ou online e forma de pagamento (dinheiro, cartão ou Pix); baixa automática de estoque; bloqueio de venda sem estoque suficiente; alerta de estoque abaixo do mínimo; exigência de receita para controlados; relatório simples de quantidade vendida por medicamento.
 
-**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado de receitas médicas.
+**Fora do escopo inicial:** controle de lotes e validade; pedidos de compra aos fornecedores; histórico completo de movimentação de estoque; cadastro detalhado da receita médica (médico, CRM, datas, dosagem e posologia). Em venda de controlado registra-se apenas o número da receita.
 
 ## 6. Principais funcionalidades
 
-O sistema permitirá que o gestor acompanhe vendas e itens vendidos do dia, produtos abaixo do estoque mínimo e quantidade de funcionários ativos, além de consultar as vendas e a quantidade vendida por medicamento. O gestor poderá cadastrar, editar e remover produtos (com categoria, preço, estoque, estoque mínimo e marcação de controlado), funcionários e fornecedores. Ao cadastrar um funcionário, o sistema gera usuário e senha de acesso.
+O sistema permitirá que o gestor acompanhe vendas e itens vendidos do dia, produtos abaixo do estoque mínimo e quantidade de funcionários ativos, além de consultar as vendas e a quantidade vendida por medicamento. O gestor poderá cadastrar, editar e remover produtos (com categoria, preço, estoque, estoque mínimo e marcação de controlado), categorias e fornecedores, e cadastrar, editar e inativar funcionários. Ao cadastrar um funcionário, o sistema gera usuário e senha de acesso. Funcionários não são apagados, para preservar o histórico de quem atendeu cada venda.
 
 Os colaboradores poderão registrar vendas escolhendo cliente, canal, forma de pagamento (dinheiro, cartão ou Pix) e um ou mais produtos, com cálculo automático do total e baixa do estoque. O sistema impedirá a venda de produto sem estoque ou em quantidade maior que a disponível. Poderão cadastrar, editar e inativar clientes, consultar o estoque e atualizar os próprios dados de acesso.
 
@@ -53,7 +53,7 @@ Os colaboradores poderão registrar vendas escolhendo cliente, canal, forma de p
 | Painel (visão geral) | Acessa | Não acessa |
 | Vendas | Consulta | Registra e consulta |
 | Estoque | Consulta | Consulta |
-| Produtos | Cadastra, edita e remove | Não acessa |
+| Produtos e categorias | Cadastra, edita e remove | Não acessa |
 | Clientes | Consulta | Cadastra, edita e inativa |
 | Equipe | Cadastra, edita e inativa | Não acessa |
 | Fornecedores | Cadastra, edita e remove | Não acessa |
@@ -61,7 +61,7 @@ Os colaboradores poderão registrar vendas escolhendo cliente, canal, forma de p
 
 ## 7. Requisitos e restrições importantes
 
-- Toda venda identifica o canal (presencial ou online) e o atendente que a registrou.
+- Toda venda identifica o canal (presencial ou online) e o atendente, que é o colaborador que registrou o pedido, inclusive nas vendas online.
 - Venda que contenha medicamento controlado exige cliente cadastrado (não vale "cliente balcão") e número da receita médica.
 - Não é possível registrar venda de produto sem estoque nem com quantidade maior que o estoque disponível, em qualquer canal. O estoque diminui automaticamente a cada venda e nunca fica negativo. Produto abaixo do mínimo é sinalizado como "repor". O protótipo ainda não implementa esse bloqueio.
 - Salários e dados da equipe são visíveis somente ao gestor.
@@ -92,7 +92,7 @@ Os aspectos mais críticos do sistema são o controle de acesso, a integridade d
 
 As permissões por perfil devem ser aplicadas no backend (Xano), e não apenas escondidas na interface. Senhas devem ser armazenadas com hash. O protótipo mostra senhas em texto puro e pré-preenchidas na tela de login, o que vale somente como demonstração.
 
-Dados pessoais (CPF, telefone, endereço) e salários exigem cuidado de acesso e devem ser expostos só a quem precisa. Venda com controlado deve manter o vínculo entre cliente, receita e atendente. Vendas registradas não são editadas nem removidas pelas telas, para preservar o histórico. A validação de estoque deve acontecer no backend, no momento de registrar a venda, para que vendas simultâneas não deixem o estoque negativo. Como clientes estão ligados a vendas, eles não são apagados, e sim inativados. A mesma abordagem deve ser avaliada para funcionários.
+Dados pessoais (CPF, telefone, endereço) e salários exigem cuidado de acesso e devem ser expostos só a quem precisa. Venda com controlado deve manter o vínculo entre cliente, receita e atendente. Vendas registradas não são editadas nem removidas pelas telas, para preservar o histórico. A validação de estoque deve acontecer no backend, no momento de registrar a venda, para que vendas simultâneas não deixem o estoque negativo. Como clientes estão ligados a vendas, eles não são apagados, e sim inativados. Funcionários também não são apagados: a saída é registrada inativando o usuário. A mesma abordagem deve ser avaliada para produtos e fornecedores.
 
 ## 11. Estratégia de desenvolvimento
 
@@ -112,7 +112,7 @@ Ordem sugerida:
 3. **Fornecedores:** o gestor cadastra, edita e remove fornecedores. Banco: prazo de entrega.
 4. **Produtos e estoque:** o gestor cadastra produtos e categorias, e ambos os perfis consultam o estoque, com alerta de reposição. Banco: quantidade em estoque e estoque mínimo.
 5. **Clientes:** o colaborador cadastra, edita e inativa clientes e seus endereços. Banco: situação do cliente.
-6. **Vendas:** o colaborador registra pedido, venda e pagamento, com bloqueio por estoque, baixa automática e regras de controlados com receita. Depende de produtos e clientes. Banco: canal.
+6. **Vendas:** o colaborador registra pedido, venda e pagamento, com bloqueio por estoque, baixa automática e regras de controlados com receita. Depende de produtos e clientes. Banco: canal no pedido e número na receita.
 7. **Equipe e minha conta:** o gestor cadastra funcionários, com usuário e senha gerados, e os inativa. O colaborador altera o próprio usuário e senha. Banco: salário.
 8. **Painel do gestor:** vendas e itens do dia, produtos abaixo do mínimo, funcionários ativos e quantidade vendida por medicamento. Depende de vendas.
 9. Reavaliar o escopo ao final, considerando itens como lotes, pedidos de compra e histórico de movimentação de estoque.
@@ -124,6 +124,6 @@ Ordem sugerida:
 - `AGENTS.md` e `openspec/config.yaml`: instruções e contexto para o assistente de IA.
 - `openspec/`: especificações e mudanças em andamento.
 - Banco de dados no Xano: fonte de verdade da estrutura de dados.
-- Protótipo HTML: referência visual e de permissões, sem valor de especificação final.
+- `docs/prototipo/farmagestao-prototipo.html`: referência visual e de permissões, sem valor de especificação final.
 
 Em caso de divergência, o modelo de domínio e as especificações prevalecem sobre o overview nos detalhes, e o overview prevalece sobre o protótipo.
