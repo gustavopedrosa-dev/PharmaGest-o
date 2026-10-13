@@ -1,0 +1,182 @@
+// FarmaGestão — banco de dados (escopo inicial)
+//
+// Base: diagrama db_farmacia (dbdiagram.io) + ajustes definidos em docs/domain-model.md.
+// Campos com note "NOVO" ainda não existem no banco e entram nas changes indicadas
+// na seção 11 do project-overview.md (todos opcionais ou com valor padrão).
+//
+// Fora do escopo inicial (continuam no Xano, mas não são usadas):
+//   lote, pedido_compra, item_pedido_compra, movimentacao_estoque
+
+Table usuario {
+  id_usuario int [pk]
+  id_funcionario int [unique]
+  login varchar [unique]
+  senha_hash varchar
+  perfil_acesso varchar [note: 'gestor ou colaborador']
+  ativo boolean [default: true, note: 'usuário inativo não acessa o sistema; saída de funcionário = inativar']
+}
+
+Table funcionario {
+  id_funcionario int [pk]
+  nome varchar
+  cpf varchar [unique]
+  data_nascimento date
+  telefone varchar
+  email varchar
+  cargo varchar
+  data_admissao datetime
+  salario decimal [note: 'NOVO. Visível apenas ao gestor']
+}
+
+Table cliente {
+  id_cliente int [pk]
+  nome varchar
+  cpf varchar [unique]
+  data_nascimento date
+  telefone varchar
+  email varchar
+  data_cadastro datetime
+  ativo boolean [default: true, note: 'NOVO. Cliente nunca é apagado, só inativado']
+}
+
+Table endereco {
+  id_endereco int [pk]
+  id_cliente int
+  logradouro varchar
+  numero varchar
+  bairro varchar
+  cidade varchar
+  estado varchar
+  cep varchar
+  complemento varchar
+  tipo varchar
+}
+
+Table categoria {
+  id_categoria int [pk]
+  nome varchar
+}
+
+Table fornecedor {
+  id_fornecedor int [pk]
+  nome varchar
+  cnpj varchar [unique]
+  telefone varchar
+  email varchar
+  endereco varchar
+  prazo_entrega varchar [note: 'NOVO. No protótipo é texto, ex.: 5 dias úteis']
+}
+
+Table produto {
+  id_produto int [pk]
+  id_categoria int
+  id_fornecedor int
+  nome varchar
+  descricao varchar
+  codigo_barras varchar
+  controlado boolean [note: 'exige cliente cadastrado e receita na venda']
+  preco_venda decimal
+  quantidade_estoque int [default: 0, note: 'NOVO. Reduzida direto pela venda; nunca negativa']
+  estoque_minimo int [default: 0, note: 'NOVO. Abaixo disso o produto é sinalizado para reposição']
+}
+
+Table pedido {
+  id_pedido int [pk]
+  id_cliente int [note: 'opcional (cliente balcão), obrigatório se houver controlado']
+  id_funcionario int [note: 'atendente: colaborador que registra o pedido, inclusive no canal online']
+  data_pedido datetime
+  status varchar
+  canal varchar [note: 'NOVO. presencial ou online']
+}
+
+Table item_pedido {
+  id_item_pedido int [pk]
+  id_pedido int
+  id_produto int
+  id_item_receita int [note: 'preenchido apenas para produto controlado']
+  quantidade int [note: 'mínimo 1; não pode exceder o estoque do produto']
+  valor_unitario decimal [note: 'preço praticado na venda']
+}
+
+Table venda {
+  id_venda int [pk]
+  id_pedido int [unique]
+  data_venda datetime
+  valor_total decimal
+  status varchar
+}
+
+Table pagamento {
+  id_pagamento int [pk]
+  id_venda int
+  forma_pagamento varchar [note: 'dinheiro, cartão ou Pix']
+  valor decimal
+}
+
+Table receita {
+  id_receita int [pk]
+  id_cliente int
+  numero varchar [note: 'NOVO. Exigido na venda de controlado']
+  nome_medico varchar [note: 'opcional no escopo inicial']
+  crm_medico varchar [note: 'opcional no escopo inicial']
+  data_emissao date [note: 'opcional no escopo inicial']
+  data_validade date [note: 'opcional no escopo inicial']
+}
+
+Table item_receita {
+  id_item_receita int [pk]
+  id_receita int
+  id_produto int
+  dosagem varchar [note: 'opcional no escopo inicial']
+  posologia varchar [note: 'opcional no escopo inicial']
+  quantidade_prescrita int [note: 'registro mínimo: produto e quantidade']
+}
+
+// Relacionamentos
+
+Ref: usuario.id_funcionario - funcionario.id_funcionario // 1:1
+
+Ref: endereco.id_cliente > cliente.id_cliente
+
+Ref: produto.id_categoria > categoria.id_categoria
+Ref: produto.id_fornecedor > fornecedor.id_fornecedor
+
+Ref: pedido.id_cliente > cliente.id_cliente
+Ref: pedido.id_funcionario > funcionario.id_funcionario
+Ref: item_pedido.id_pedido > pedido.id_pedido
+Ref: item_pedido.id_produto > produto.id_produto
+Ref: item_pedido.id_item_receita > item_receita.id_item_receita
+
+Ref: venda.id_pedido - pedido.id_pedido // 1:1
+Ref: pagamento.id_venda > venda.id_venda // no diagrama original: uma venda pode ter vários pagamentos
+
+Ref: receita.id_cliente > cliente.id_cliente
+Ref: item_receita.id_receita > receita.id_receita
+Ref: item_receita.id_produto > produto.id_produto
+
+// Agrupamentos (visual)
+
+TableGroup acesso {
+  usuario
+  funcionario
+}
+
+TableGroup cadastros {
+  cliente
+  endereco
+  categoria
+  fornecedor
+  produto
+}
+
+TableGroup vendas {
+  pedido
+  item_pedido
+  venda
+  pagamento
+}
+
+TableGroup receitas {
+  receita
+  item_receita
+}
