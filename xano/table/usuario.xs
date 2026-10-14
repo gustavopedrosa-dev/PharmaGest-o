@@ -1,5 +1,5 @@
 table usuario {
-  auth = false
+  auth = true
 
   schema {
     int id
@@ -8,12 +8,12 @@ table usuario {
     }
   
     text login
-    text? senha_hash
-    enum? perfil_acesso {
-      values = ["admin", "atendente", "farmacêutico", "gerente"]
+    password senha_hash
+    enum perfil_acesso {
+      values = ["gestor", "colaborador"]
     }
   
-    bool? ativo
+    bool ativo?=true
   }
 
   index = [
@@ -23,10 +23,6 @@ table usuario {
       field: [{name: "id_funcionario", op: "asc"}]
     }
     {type: "btree|unique", field: [{name: "login", op: "asc"}]}
-    {
-      type : "btree|unique"
-      field: [{name: "senha_hash", op: "asc"}]
-    }
   ]
 
   guid = "FmEeyG0mupdPTVqTey-6a3QVtx8"

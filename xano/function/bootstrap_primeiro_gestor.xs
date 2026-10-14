@@ -5,7 +5,7 @@ function bootstrap_primeiro_gestor {
     text nome filters=trim
     text cpf filters=trim
     text login filters=trim
-    password senha
+    text senha
   }
 
   stack {
