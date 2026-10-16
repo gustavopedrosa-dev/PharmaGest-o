@@ -1,0 +1,303 @@
+[
+    {
+        "label": "annotations",
+        "importPath": "__future__",
+        "description": "__future__",
+        "isExtraImport": true,
+        "detail": "__future__",
+        "documentation": {}
+    },
+    {
+        "label": "annotations",
+        "importPath": "__future__",
+        "description": "__future__",
+        "isExtraImport": true,
+        "detail": "__future__",
+        "documentation": {}
+    },
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "dataclass",
+        "importPath": "dataclasses",
+        "description": "dataclasses",
+        "isExtraImport": true,
+        "detail": "dataclasses",
+        "documentation": {}
+    },
+    {
+        "label": "Any",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "httpx",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "httpx",
+        "description": "httpx",
+        "detail": "httpx",
+        "documentation": {}
+    },
+    {
+        "label": "reflex",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "reflex",
+        "description": "reflex",
+        "detail": "reflex",
+        "documentation": {}
+    },
+    {
+        "label": "FORBIDDEN_MESSAGE",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "SESSION_EXPIRED_MESSAGE",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "UNAVAILABLE_MESSAGE",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Session",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoClient",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoError",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoForbiddenError",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoUnauthorizedError",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoUnavailableError",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "config",
+        "importPath": "rxconfig",
+        "description": "rxconfig",
+        "isExtraImport": true,
+        "detail": "rxconfig",
+        "documentation": {}
+    },
+    {
+        "label": "XanoError",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class XanoError(Exception):\n    \"\"\"Erro de comunicaÃ§Ã£o ou de contrato retornado pelo Xano.\"\"\"\n    def __init__(self, message: str, status_code: int | None = None) -> None:\n        super().__init__(message)\n        self.message = message\n        self.status_code = status_code\nclass XanoUnauthorizedError(XanoError):\n    \"\"\"A sessÃ£o nÃ£o existe, expirou ou pertence a uma conta inativa.\"\"\"\nclass XanoForbiddenError(XanoError):\n    \"\"\"A identidade autenticada nÃ£o possui a permissÃ£o necessÃ¡ria.\"\"\"",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoUnauthorizedError",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class XanoUnauthorizedError(XanoError):\n    \"\"\"A sessÃ£o nÃ£o existe, expirou ou pertence a uma conta inativa.\"\"\"\nclass XanoForbiddenError(XanoError):\n    \"\"\"A identidade autenticada nÃ£o possui a permissÃ£o necessÃ¡ria.\"\"\"\nclass XanoUnavailableError(XanoError):\n    \"\"\"O backend estÃ¡ indisponÃ­vel ou excedeu o timeout.\"\"\"\n@dataclass(frozen=True)\nclass Session:\n    user_id: int\n    funcionario_id: int",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoForbiddenError",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class XanoForbiddenError(XanoError):\n    \"\"\"A identidade autenticada nÃ£o possui a permissÃ£o necessÃ¡ria.\"\"\"\nclass XanoUnavailableError(XanoError):\n    \"\"\"O backend estÃ¡ indisponÃ­vel ou excedeu o timeout.\"\"\"\n@dataclass(frozen=True)\nclass Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoUnavailableError",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class XanoUnavailableError(XanoError):\n    \"\"\"O backend estÃ¡ indisponÃ­vel ou excedeu o timeout.\"\"\"\n@dataclass(frozen=True)\nclass Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\ndef _message_from_response(response: httpx.Response) -> str:",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Session",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\ndef _message_from_response(response: httpx.Response) -> str:\n    try:\n        payload = response.json()\n    except ValueError:",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoClient",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class XanoClient:\n    \"\"\"Adaptador Ãºnico para chamadas autenticadas feitas pelo servidor Reflex.\"\"\"\n    def __init__(\n        self,\n        base_url: str | None = None,\n        transport: httpx.BaseTransport | None = None,\n        timeout: float = 10.0,\n    ) -> None:\n        configured_url = base_url or os.environ.get(\"XANO_BASE_URL\", \"\")\n        if not configured_url:",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "AUTH_INVALID_MESSAGE",
+        "kind": 5,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "AUTH_INVALID_MESSAGE = \"usuÃ¡rio ou senha invÃ¡lidos\"\nSESSION_EXPIRED_MESSAGE = \"SessÃ£o expirada. Entre novamente.\"\nFORBIDDEN_MESSAGE = \"VocÃª nÃ£o tem permissÃ£o para esta aÃ§Ã£o\"\nUNAVAILABLE_MESSAGE = \"ServiÃ§o indisponÃ­vel, tente novamente\"\nclass XanoError(Exception):\n    \"\"\"Erro de comunicaÃ§Ã£o ou de contrato retornado pelo Xano.\"\"\"\n    def __init__(self, message: str, status_code: int | None = None) -> None:\n        super().__init__(message)\n        self.message = message\n        self.status_code = status_code",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "SESSION_EXPIRED_MESSAGE",
+        "kind": 5,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "SESSION_EXPIRED_MESSAGE = \"SessÃ£o expirada. Entre novamente.\"\nFORBIDDEN_MESSAGE = \"VocÃª nÃ£o tem permissÃ£o para esta aÃ§Ã£o\"\nUNAVAILABLE_MESSAGE = \"ServiÃ§o indisponÃ­vel, tente novamente\"\nclass XanoError(Exception):\n    \"\"\"Erro de comunicaÃ§Ã£o ou de contrato retornado pelo Xano.\"\"\"\n    def __init__(self, message: str, status_code: int | None = None) -> None:\n        super().__init__(message)\n        self.message = message\n        self.status_code = status_code\nclass XanoUnauthorizedError(XanoError):",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "FORBIDDEN_MESSAGE",
+        "kind": 5,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "FORBIDDEN_MESSAGE = \"VocÃª nÃ£o tem permissÃ£o para esta aÃ§Ã£o\"\nUNAVAILABLE_MESSAGE = \"ServiÃ§o indisponÃ­vel, tente novamente\"\nclass XanoError(Exception):\n    \"\"\"Erro de comunicaÃ§Ã£o ou de contrato retornado pelo Xano.\"\"\"\n    def __init__(self, message: str, status_code: int | None = None) -> None:\n        super().__init__(message)\n        self.message = message\n        self.status_code = status_code\nclass XanoUnauthorizedError(XanoError):\n    \"\"\"A sessÃ£o nÃ£o existe, expirou ou pertence a uma conta inativa.\"\"\"",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "UNAVAILABLE_MESSAGE",
+        "kind": 5,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "UNAVAILABLE_MESSAGE = \"ServiÃ§o indisponÃ­vel, tente novamente\"\nclass XanoError(Exception):\n    \"\"\"Erro de comunicaÃ§Ã£o ou de contrato retornado pelo Xano.\"\"\"\n    def __init__(self, message: str, status_code: int | None = None) -> None:\n        super().__init__(message)\n        self.message = message\n        self.status_code = status_code\nclass XanoUnauthorizedError(XanoError):\n    \"\"\"A sessÃ£o nÃ£o existe, expirou ou pertence a uma conta inativa.\"\"\"\nclass XanoForbiddenError(XanoError):",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "State",
+        "kind": 6,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "class State(rx.State):\n    \"\"\"Estado server-side; o token privado nunca é serializado para o navegador.\"\"\"\n    _token: str = \"\"\n    session_ready: bool = False\n    authenticated: bool = False\n    nome: str = \"\"\n    login: str = \"\"\n    perfil_acesso: str = \"\"\n    mensagem: str = \"\"\n    login_input: str = \"\"",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "login_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def login_page() -> rx.Component:\n    return rx.center(\n        rx.vstack(\n            rx.heading(\"FarmaGestão\", size=\"8\"),\n            rx.text(\"Entre com seu usuário.\"),\n            rx.input(\n                placeholder=\"Login\",\n                value=State.login_input,\n                on_change=State.set_login_input,\n            ),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "navigation",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def navigation() -> rx.Component:\n    return rx.hstack(\n        rx.cond(\n            State.is_gestor,\n            rx.link(\"Painel\", href=\"/dashboard\"),\n            rx.text(\"Atendimento\"),\n        ),\n        rx.link(\"Minha conta\", href=\"/minha-conta\"),\n        rx.button(\"Sair\", on_click=State.logout),\n        justify=\"between\",",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "protected_layout",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def protected_layout(content: rx.Component) -> rx.Component:\n    return rx.cond(\n        State.authenticated,\n        rx.vstack(navigation(), content, width=\"100%\", padding=\"2rem\"),\n        rx.center(rx.text(\"Carregando...\"), min_height=\"100vh\"),\n    )\ndef dashboard_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Painel do gestor\"),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "dashboard_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def dashboard_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Painel do gestor\"),\n            rx.text(\"Bem-vindo, \", State.nome, \".\"),\n        )\n    )\ndef account_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "account_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def account_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Minha conta\"),\n            rx.text(\"Usuário: \", State.login),\n            rx.input(\n                placeholder=\"Novo login\",\n                value=State.novo_login,\n                on_change=State.set_novo_login,\n            ),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "app",
+        "kind": 5,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "app = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(login_page, route=\"/\")",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "config",
+        "kind": 5,
+        "importPath": "rxconfig",
+        "description": "rxconfig",
+        "peekOfCode": "config = rx.Config(\n    app_name=\"connectdrogs\",\n    plugins=[\n        rx.plugins.SitemapPlugin(),\n        rx.plugins.TailwindV4Plugin(),\n        rx.plugins.RadixThemesPlugin(),\n    ]\n)",
+        "detail": "rxconfig",
+        "documentation": {}
+    }
+]
