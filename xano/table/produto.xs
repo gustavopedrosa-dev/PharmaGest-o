@@ -17,12 +17,16 @@ table produto {
     text? codigo_barras
     bool? controlado
     decimal? preco_venda
+    int quantidade_estoque?=0
+    int estoque_minimo?=0
+    bool ativo?=true
   }
 
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "id_categoria", op: "asc"}]}
     {type: "btree", field: [{name: "id_fornecedor", op: "asc"}]}
+    {type: "btree", field: [{name: "ativo", op: "asc"}]}
   ]
 
   tags = ["modulo produtos", "farmagestão"]

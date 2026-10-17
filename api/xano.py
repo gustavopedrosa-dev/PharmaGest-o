@@ -45,6 +45,28 @@ class Session:
     perfil_acesso: str
 
 
+@dataclass(frozen=True)
+class Product:
+    id: int
+    id_categoria: int
+    id_fornecedor: int
+    nome: str
+    descricao: str
+    codigo_barras: str
+    controlado: bool
+    preco_venda: float
+    quantidade_estoque: int
+    estoque_minimo: int
+    ativo: bool
+
+
+@dataclass(frozen=True)
+class Category:
+    id: int
+    nome: str
+    ativo: bool
+
+
 def _message_from_response(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -152,6 +174,71 @@ class XanoClient:
         )
         return self._session_from_payload(payload["sessao"])
 
+    def list_products(self, token: str) -> list[Product]:
+        payload = self._request("GET", "/api:94CoO3xX/produtos/estoque", token)
+        return [self._product_from_payload(item) for item in payload["produtos"]]
+
+    def create_product(self, token: str, product: dict[str, Any]) -> Product:
+        payload = self._request(
+            "POST",
+            "/api:94CoO3xX/produtos/produto",
+            token,
+            json=product,
+        )
+        return self._product_from_payload(payload["produto"])
+
+    def update_product(
+        self,
+        token: str,
+        product_id: int,
+        product: dict[str, Any],
+    ) -> Product:
+        payload = self._request(
+            "PATCH",
+            f"/api:94CoO3xX/produtos/produto/{product_id}",
+            token,
+            json=product,
+        )
+        return self._product_from_payload(payload["produto"])
+
+    def deactivate_product(self, token: str, product_id: int) -> Product:
+        payload = self._request(
+            "POST",
+            f"/api:94CoO3xX/produtos/produto/{product_id}/inativar",
+            token,
+        )
+        return self._product_from_payload(payload["produto"])
+
+    def list_categories(self, token: str) -> list[Category]:
+        payload = self._request("GET", "/api:94CoO3xX/produtos/categorias", token)
+        return [self._category_from_payload(item) for item in payload["categorias"]]
+
+    def create_category(self, token: str, nome: str) -> Category:
+        payload = self._request(
+            "POST",
+            "/api:94CoO3xX/produtos/categoria",
+            token,
+            json={"nome": nome},
+        )
+        return self._category_from_payload(payload["categoria"])
+
+    def update_category(self, token: str, category_id: int, nome: str) -> Category:
+        payload = self._request(
+            "PATCH",
+            f"/api:94CoO3xX/produtos/categoria/{category_id}",
+            token,
+            json={"nome": nome},
+        )
+        return self._category_from_payload(payload["categoria"])
+
+    def deactivate_category(self, token: str, category_id: int) -> Category:
+        payload = self._request(
+            "POST",
+            f"/api:94CoO3xX/produtos/categoria/{category_id}/inativar",
+            token,
+        )
+        return self._category_from_payload(payload["categoria"])
+
     @staticmethod
     def _session_from_payload(payload: dict[str, Any]) -> Session:
         return Session(
@@ -160,4 +247,28 @@ class XanoClient:
             nome=str(payload["nome"]),
             login=str(payload["login"]),
             perfil_acesso=str(payload["perfil_acesso"]),
+        )
+
+    @staticmethod
+    def _product_from_payload(payload: dict[str, Any]) -> Product:
+        return Product(
+            id=int(payload["id"]),
+            id_categoria=int(payload["id_categoria"]),
+            id_fornecedor=int(payload["id_fornecedor"]),
+            nome=str(payload.get("nome") or ""),
+            descricao=str(payload.get("descricao") or ""),
+            codigo_barras=str(payload.get("codigo_barras") or ""),
+            controlado=bool(payload.get("controlado", False)),
+            preco_venda=float(payload.get("preco_venda") or 0),
+            quantidade_estoque=int(payload.get("quantidade_estoque") or 0),
+            estoque_minimo=int(payload.get("estoque_minimo") or 0),
+            ativo=bool(payload.get("ativo", True)),
+        )
+
+    @staticmethod
+    def _category_from_payload(payload: dict[str, Any]) -> Category:
+        return Category(
+            id=int(payload["id"]),
+            nome=str(payload.get("nome") or ""),
+            ativo=bool(payload.get("ativo", True)),
         )

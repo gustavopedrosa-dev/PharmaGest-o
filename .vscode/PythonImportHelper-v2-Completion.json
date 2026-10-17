@@ -131,11 +131,44 @@
         "documentation": {}
     },
     {
+        "label": "Product",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoClient",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "XanoForbiddenError",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
         "label": "config",
         "importPath": "rxconfig",
         "description": "rxconfig",
         "isExtraImport": true,
         "detail": "rxconfig",
+        "documentation": {}
+    },
+    {
+        "label": "unittest",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "unittest",
+        "description": "unittest",
+        "detail": "unittest",
         "documentation": {}
     },
     {
@@ -170,7 +203,7 @@
         "kind": 6,
         "importPath": "api.xano",
         "description": "api.xano",
-        "peekOfCode": "class XanoUnavailableError(XanoError):\n    \"\"\"O backend estÃ¡ indisponÃ­vel ou excedeu o timeout.\"\"\"\n@dataclass(frozen=True)\nclass Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\ndef _message_from_response(response: httpx.Response) -> str:",
+        "peekOfCode": "class XanoUnavailableError(XanoError):\n    \"\"\"O backend estÃ¡ indisponÃ­vel ou excedeu o timeout.\"\"\"\n@dataclass(frozen=True)\nclass Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\n@dataclass(frozen=True)",
         "detail": "api.xano",
         "documentation": {}
     },
@@ -179,7 +212,25 @@
         "kind": 6,
         "importPath": "api.xano",
         "description": "api.xano",
-        "peekOfCode": "class Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\ndef _message_from_response(response: httpx.Response) -> str:\n    try:\n        payload = response.json()\n    except ValueError:",
+        "peekOfCode": "class Session:\n    user_id: int\n    funcionario_id: int\n    nome: str\n    login: str\n    perfil_acesso: str\n@dataclass(frozen=True)\nclass Product:\n    id: int\n    id_categoria: int",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Product",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class Product:\n    id: int\n    id_categoria: int\n    id_fornecedor: int\n    nome: str\n    descricao: str\n    codigo_barras: str\n    controlado: bool\n    preco_venda: float\n    quantidade_estoque: int",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Category",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class Category:\n    id: int\n    nome: str\n    ativo: bool\ndef _message_from_response(response: httpx.Response) -> str:\n    try:\n        payload = response.json()\n    except ValueError:\n        return response.text or \"Erro ao comunicar com o Xano.\"\n    if isinstance(payload, dict):",
         "detail": "api.xano",
         "documentation": {}
     },
@@ -251,7 +302,7 @@
         "kind": 2,
         "importPath": "connectdrogs.connectdrogs",
         "description": "connectdrogs.connectdrogs",
-        "peekOfCode": "def navigation() -> rx.Component:\n    return rx.hstack(\n        rx.cond(\n            State.is_gestor,\n            rx.link(\"Painel\", href=\"/dashboard\"),\n            rx.text(\"Atendimento\"),\n        ),\n        rx.link(\"Minha conta\", href=\"/minha-conta\"),\n        rx.button(\"Sair\", on_click=State.logout),\n        justify=\"between\",",
+        "peekOfCode": "def navigation() -> rx.Component:\n    return rx.hstack(\n        rx.cond(\n            State.is_gestor,\n            rx.hstack(\n                rx.link(\"Painel\", href=\"/dashboard\"),\n                rx.link(\"Produtos\", href=\"/produtos\"),\n            ),\n            rx.text(\"Atendimento\"),\n        ),",
         "detail": "connectdrogs.connectdrogs",
         "documentation": {}
     },
@@ -283,12 +334,57 @@
         "documentation": {}
     },
     {
+        "label": "product_list",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def product_list() -> rx.Component:\n    return rx.vstack(\n        rx.heading(\"Produtos ativos\"),\n        rx.foreach(\n            State.produtos,\n            lambda product: rx.hstack(\n                rx.text(product[\"id\"], width=\"3rem\"),\n                rx.text(product[\"nome\"], width=\"14rem\"),\n                rx.text(\"Estoque: \", product[\"estoque\"]),\n                rx.text(\"Mínimo: \", product[\"minimo\"]),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "product_form",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def product_form() -> rx.Component:\n    return rx.vstack(\n            rx.heading(\"Cadastrar produto\", size=\"5\"),\n            rx.input(\n                placeholder=\"ID da categoria\",\n                value=State.produto_categoria_id,\n                on_change=lambda value: State.set_product_field(\n                    \"produto_categoria_id\", value\n                ),\n            ),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "products_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def products_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Gestão de produtos\"),\n            rx.cond(State.is_gestor, product_form(), rx.text(FORBIDDEN_MESSAGE)),\n            rx.input(\n                placeholder=\"ID do produto para inativar\",\n                value=State.produto_id,\n                on_change=State.set_product_id,\n            ),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "stock_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def stock_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Consulta de estoque\"),\n            product_list(),\n            rx.cond(State.mensagem != \"\", rx.text(State.mensagem)),\n        )\n    )\napp = rx.App()\napp.add_page(login_page, route=\"/login\")",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
         "label": "app",
         "kind": 5,
         "importPath": "connectdrogs.connectdrogs",
         "description": "connectdrogs.connectdrogs",
-        "peekOfCode": "app = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(login_page, route=\"/\")",
+        "peekOfCode": "app = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(products_page, route=\"/produtos\", on_load=State.load_products)\napp.add_page(stock_page, route=\"/estoque\", on_load=State.load_products)\napp.add_page(login_page, route=\"/\")",
         "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "ProductClientTests",
+        "kind": 6,
+        "importPath": "tests.test_xano_products",
+        "description": "tests.test_xano_products",
+        "peekOfCode": "class ProductClientTests(unittest.TestCase):\n    def test_list_products_sends_bearer_token_and_normalizes_payload(self) -> None:\n        def handler(request: httpx.Request) -> httpx.Response:\n            self.assertEqual(\n                request.url.path,\n                \"/api:94CoO3xX/produtos/estoque\",\n            )\n            self.assertEqual(\n                request.headers[\"Authorization\"],\n                \"Bearer token\",",
+        "detail": "tests.test_xano_products",
         "documentation": {}
     },
     {
