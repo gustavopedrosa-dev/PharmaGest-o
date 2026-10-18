@@ -7,7 +7,11 @@ table venda {
     int id_pedido {
       table = "pedido"
     }
-  
+
+    int? id_funcionario {
+      table = "funcionario"
+    }
+
     timestamp? data_venda
     decimal? valor_total
     enum? status {
@@ -21,6 +25,7 @@ table venda {
       type : "btree|unique"
       field: [{name: "id_pedido", op: "asc"}]
     }
+    {type: "btree", field: [{name: "id_funcionario", op: "asc"}]}
   ]
 
   tags = ["modulo de venda", "farmagestão"]

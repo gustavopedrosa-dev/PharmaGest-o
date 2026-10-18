@@ -139,6 +139,14 @@
         "documentation": {}
     },
     {
+        "label": "Sale",
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "isExtraImport": true,
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
         "label": "XanoClient",
         "importPath": "api.xano",
         "description": "api.xano",
@@ -169,6 +177,15 @@
         "importPath": "unittest",
         "description": "unittest",
         "detail": "unittest",
+        "documentation": {}
+    },
+    {
+        "label": "json",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "json",
+        "description": "json",
+        "detail": "json",
         "documentation": {}
     },
     {
@@ -230,7 +247,25 @@
         "kind": 6,
         "importPath": "api.xano",
         "description": "api.xano",
-        "peekOfCode": "class Category:\n    id: int\n    nome: str\n    ativo: bool\ndef _message_from_response(response: httpx.Response) -> str:\n    try:\n        payload = response.json()\n    except ValueError:\n        return response.text or \"Erro ao comunicar com o Xano.\"\n    if isinstance(payload, dict):",
+        "peekOfCode": "class Category:\n    id: int\n    nome: str\n    ativo: bool\n@dataclass(frozen=True)\nclass Sale:\n    id: int\n    id_pedido: int\n    data_venda: str\n    valor_total: float",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Sale",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class Sale:\n    id: int\n    id_pedido: int\n    data_venda: str\n    valor_total: float\n    status: str\n@dataclass(frozen=True)\nclass Order:\n    id: int\n    id_cliente: int | None",
+        "detail": "api.xano",
+        "documentation": {}
+    },
+    {
+        "label": "Order",
+        "kind": 6,
+        "importPath": "api.xano",
+        "description": "api.xano",
+        "peekOfCode": "class Order:\n    id: int\n    id_cliente: int | None\n    id_funcionario: int\n    data_pedido: str\n    status: str\n    canal: str\ndef _message_from_response(response: httpx.Response) -> str:\n    try:\n        payload = response.json()",
         "detail": "api.xano",
         "documentation": {}
     },
@@ -302,7 +337,7 @@
         "kind": 2,
         "importPath": "connectdrogs.connectdrogs",
         "description": "connectdrogs.connectdrogs",
-        "peekOfCode": "def navigation() -> rx.Component:\n    return rx.hstack(\n        rx.cond(\n            State.is_gestor,\n            rx.hstack(\n                rx.link(\"Painel\", href=\"/dashboard\"),\n                rx.link(\"Produtos\", href=\"/produtos\"),\n            ),\n            rx.text(\"Atendimento\"),\n        ),",
+        "peekOfCode": "def navigation() -> rx.Component:\n    return rx.hstack(\n        rx.cond(\n            State.is_gestor,\n            rx.hstack(\n                rx.link(\"Painel\", href=\"/dashboard\"),\n                rx.link(\"Produtos\", href=\"/produtos\"),\n                rx.link(\"Vendas\", href=\"/vendas\"),\n            ),\n            rx.hstack(",
         "detail": "connectdrogs.connectdrogs",
         "documentation": {}
     },
@@ -365,7 +400,43 @@
         "kind": 2,
         "importPath": "connectdrogs.connectdrogs",
         "description": "connectdrogs.connectdrogs",
-        "peekOfCode": "def stock_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Consulta de estoque\"),\n            product_list(),\n            rx.cond(State.mensagem != \"\", rx.text(State.mensagem)),\n        )\n    )\napp = rx.App()\napp.add_page(login_page, route=\"/login\")",
+        "peekOfCode": "def stock_page() -> rx.Component:\n    return protected_layout(\n        rx.vstack(\n            rx.heading(\"Consulta de estoque\"),\n            product_list(),\n            rx.cond(State.mensagem != \"\", rx.text(State.mensagem)),\n        )\n    )\ndef sale_form() -> rx.Component:\n    return rx.vstack(",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "sale_form",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def sale_form() -> rx.Component:\n    return rx.vstack(\n        rx.heading(\"Registrar atendimento\"),\n        rx.input(\n            placeholder=\"ID do produto\",\n            value=State.venda_produto_id,\n            on_change=lambda value: State.set_sale_field(\"venda_produto_id\", value),\n        ),\n        rx.input(\n            placeholder=\"Quantidade\",",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "sales_history",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def sales_history() -> rx.Component:\n    return rx.vstack(\n        rx.heading(\"Histórico de vendas\"),\n        rx.foreach(\n            State.vendas,\n            lambda sale: rx.hstack(\n                rx.text(\"Venda \", sale[\"id\"]),\n                rx.text(\"Pedido \", sale[\"pedido\"]),\n                rx.text(\"Total: R$ \", sale[\"total\"]),\n                rx.text(\"Canal: \", sale[\"canal\"]),",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "attendance_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def attendance_page() -> rx.Component:\n    return protected_layout(\n        rx.cond(\n            State.is_gestor,\n            rx.text(FORBIDDEN_MESSAGE),\n            sale_form(),\n        )\n    )\ndef sales_page() -> rx.Component:\n    return protected_layout(sales_history())",
+        "detail": "connectdrogs.connectdrogs",
+        "documentation": {}
+    },
+    {
+        "label": "sales_page",
+        "kind": 2,
+        "importPath": "connectdrogs.connectdrogs",
+        "description": "connectdrogs.connectdrogs",
+        "peekOfCode": "def sales_page() -> rx.Component:\n    return protected_layout(sales_history())\napp = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(products_page, route=\"/produtos\", on_load=State.load_products)\napp.add_page(stock_page, route=\"/estoque\", on_load=State.load_products)\napp.add_page(attendance_page, route=\"/atendimento\", on_load=State.load_session)\napp.add_page(sales_page, route=\"/vendas\", on_load=State.load_sales)",
         "detail": "connectdrogs.connectdrogs",
         "documentation": {}
     },
@@ -374,7 +445,7 @@
         "kind": 5,
         "importPath": "connectdrogs.connectdrogs",
         "description": "connectdrogs.connectdrogs",
-        "peekOfCode": "app = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(products_page, route=\"/produtos\", on_load=State.load_products)\napp.add_page(stock_page, route=\"/estoque\", on_load=State.load_products)\napp.add_page(login_page, route=\"/\")",
+        "peekOfCode": "app = rx.App()\napp.add_page(login_page, route=\"/login\")\napp.add_page(dashboard_page, route=\"/dashboard\", on_load=State.load_dashboard)\napp.add_page(account_page, route=\"/minha-conta\", on_load=State.load_session)\napp.add_page(products_page, route=\"/produtos\", on_load=State.load_products)\napp.add_page(stock_page, route=\"/estoque\", on_load=State.load_products)\napp.add_page(attendance_page, route=\"/atendimento\", on_load=State.load_session)\napp.add_page(sales_page, route=\"/vendas\", on_load=State.load_sales)\napp.add_page(login_page, route=\"/\")",
         "detail": "connectdrogs.connectdrogs",
         "documentation": {}
     },

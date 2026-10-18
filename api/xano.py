@@ -67,6 +67,25 @@ class Category:
     ativo: bool
 
 
+@dataclass(frozen=True)
+class Sale:
+    id: int
+    id_pedido: int
+    data_venda: str
+    valor_total: float
+    status: str
+
+
+@dataclass(frozen=True)
+class Order:
+    id: int
+    id_cliente: int | None
+    id_funcionario: int
+    data_pedido: str
+    status: str
+    canal: str
+
+
 def _message_from_response(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -239,6 +258,99 @@ class XanoClient:
         )
         return self._category_from_payload(payload["categoria"])
 
+    def create_order(
+        self,
+        token: str,
+        *,
+        client_id: int | None,
+        channel: str,
+        items: list[dict[str, int]],
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api:8Ji5Nfc2/vendas/pedido",
+            token,
+            json={
+                "id_cliente": client_id,
+                "canal": channel,
+                "itens": items,
+            },
+        )
+
+    def confirm_order(
+        self,
+        token: str,
+        order_id: int,
+        payment_method: str,
+        prescription_number: str | None = None,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api:8Ji5Nfc2/vendas/pedido/{order_id}/confirmar",
+            token,
+            json={
+                "forma_pagamento": payment_method,
+                "numero_receita": prescription_number or None,
+            },
+        )
+
+    def list_sales(self, token: str, *, is_gestor: bool) -> list[Sale]:
+        path = (
+            "/api:8Ji5Nfc2/vendas"
+            if is_gestor
+            else "/api:8Ji5Nfc2/vendas/minhas"
+        )
+        payload = self._request("GET", path, token)
+        return [self._sale_from_payload(item) for item in payload["vendas"]]
+
+    def list_sale_history(
+        self,
+        token: str,
+        *,
+        is_gestor: bool,
+    ) -> tuple[list[Sale], list[dict[str, Any]]]:
+        path = (
+            "/api:8Ji5Nfc2/vendas"
+            if is_gestor
+            else "/api:8Ji5Nfc2/vendas/minhas"
+        )
+        payload = self._request("GET", path, token)
+        return (
+            [self._sale_from_payload(item) for item in payload["vendas"]],
+            list(payload.get("pagamentos", [])),
+        )
+
+    def list_orders(
+        self,
+        token: str,
+        *,
+        is_gestor: bool,
+    ) -> tuple[list[Order], list[dict[str, Any]]]:
+        path = (
+            "/api:8Ji5Nfc2/vendas/pedidos"
+            if is_gestor
+            else "/api:8Ji5Nfc2/vendas/meus-pedidos"
+        )
+        payload = self._request("GET", path, token)
+        return (
+            [
+                Order(
+                    id=int(item["id"]),
+                    id_cliente=(
+                        int(item["id_cliente"])
+                        if item.get("id_cliente") is not None
+                        else None
+                    ),
+                    id_funcionario=int(item["id_funcionario"]),
+                    data_pedido=str(item.get("data_pedido") or ""),
+                    status=str(item.get("status") or ""),
+                    canal=str(item.get("canal") or ""),
+                )
+                for item in payload["pedidos"]
+            ],
+            list(payload["itens"]),
+        )
+
     @staticmethod
     def _session_from_payload(payload: dict[str, Any]) -> Session:
         return Session(
@@ -271,4 +383,14 @@ class XanoClient:
             id=int(payload["id"]),
             nome=str(payload.get("nome") or ""),
             ativo=bool(payload.get("ativo", True)),
+        )
+
+    @staticmethod
+    def _sale_from_payload(payload: dict[str, Any]) -> Sale:
+        return Sale(
+            id=int(payload["id"]),
+            id_pedido=int(payload["id_pedido"]),
+            data_venda=str(payload.get("data_venda") or ""),
+            valor_total=float(payload.get("valor_total") or 0),
+            status=str(payload.get("status") or ""),
         )

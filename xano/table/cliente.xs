@@ -9,11 +9,13 @@ table cliente {
     text? telefone
     email? email
     timestamp data_cadastro
+    bool ativo?=true
   }
 
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree|unique", field: [{name: "cpf", op: "asc"}]}
+    {type: "btree", field: [{name: "ativo", op: "asc"}]}
   ]
 
   tags = ["modulo cliente", "farmagestão", "modulo pedidos"]

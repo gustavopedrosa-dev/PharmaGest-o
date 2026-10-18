@@ -7,6 +7,7 @@ table receita {
       table = "cliente"
     }
   
+    text? numero_receita
     text? nome_medico
     text? crm_medico
     date? data_emissao
@@ -16,6 +17,7 @@ table receita {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "id_cliente", op: "asc"}]}
+    {type: "btree", field: [{name: "numero_receita", op: "asc"}]}
   ]
 
   tags = ["modulo produtos", "farmagestão", "modulo cliente"]

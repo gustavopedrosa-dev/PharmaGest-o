@@ -15,12 +15,17 @@ table pedido {
     enum? status {
       values = ["pendente", "confirmado", "cancelado"]
     }
+    enum? canal {
+      values = ["presencial", "online"]
+    }
   }
 
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "id_cliente", op: "asc"}]}
     {type: "btree", field: [{name: "id_funcionario", op: "asc"}]}
+    {type: "btree", field: [{name: "status", op: "asc"}]}
+    {type: "btree", field: [{name: "canal", op: "asc"}]}
   ]
 
   tags = [

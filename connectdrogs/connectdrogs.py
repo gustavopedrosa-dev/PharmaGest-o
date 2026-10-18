@@ -35,6 +35,9 @@ class State(rx.State):
     nova_senha: str = ""
     produtos: list[dict[str, str]] = []
     categorias: list[dict[str, str]] = []
+    vendas: list[dict[str, str]] = []
+    pedidos: list[dict[str, str]] = []
+    itens_pedido: list[dict[str, str]] = []
     produto_id: str = ""
     categoria_id: str = ""
     produto_categoria_id: str = ""
@@ -47,6 +50,13 @@ class State(rx.State):
     produto_estoque_minimo: str = "0"
     produto_controlado: bool = False
     categoria_nome: str = ""
+    venda_produto_id: str = ""
+    venda_quantidade: str = "1"
+    venda_cliente_id: str = ""
+    venda_canal: str = "presencial"
+    venda_pagamento: str = "dinheiro"
+    venda_receita: str = ""
+    venda_itens: list[dict[str, str]] = []
 
     @rx.var
     def is_gestor(self) -> bool:
@@ -86,6 +96,34 @@ class State(rx.State):
 
     def set_categoria_nome(self, value: str) -> None:
         self.categoria_nome = value
+
+    def set_sale_field(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+
+    @rx.event
+    def add_sale_item(self) -> None:
+        try:
+            product_id = int(self.venda_produto_id)
+            quantity = int(self.venda_quantidade)
+        except ValueError:
+            self.mensagem = "Informe um produto e uma quantidade válidos."
+            return
+        if quantity < 1:
+            self.mensagem = "A quantidade deve ser positiva."
+            return
+        if any(item["id_produto"] == str(product_id) for item in self.venda_itens):
+            self.mensagem = "O produto já foi adicionado ao pedido."
+            return
+        self.venda_itens = [
+            *self.venda_itens,
+            {
+                "id_produto": str(product_id),
+                "quantidade": str(quantity),
+            },
+        ]
+        self.venda_produto_id = ""
+        self.venda_quantidade = "1"
+        self.mensagem = ""
 
     @rx.event
     def login_user(self) -> rx.event.EventSpec | None:
@@ -186,6 +224,122 @@ class State(rx.State):
             client = XanoClient()
             self._set_products(client.list_products(self._token))
             self._set_categories(client.list_categories(self._token))
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+        return None
+
+    @rx.event
+    def create_sale(self) -> rx.event.EventSpec | None:
+        if self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return None
+        try:
+            client_id = (
+                int(self.venda_cliente_id) if self.venda_cliente_id.strip() else None
+            )
+        except ValueError:
+            self.mensagem = "Informe um ID de cliente válido."
+            return None
+        if not self.venda_itens:
+            self.mensagem = "Adicione ao menos um item ao pedido."
+            return None
+        try:
+            client = XanoClient()
+            order = client.create_order(
+                self._token,
+                client_id=client_id,
+                channel=self.venda_canal,
+                items=[
+                    {
+                        "id_produto": int(item["id_produto"]),
+                        "quantidade": int(item["quantidade"]),
+                    }
+                    for item in self.venda_itens
+                ],
+            )
+            order_id = int(order["pedido"]["id"])
+            client.confirm_order(
+                self._token,
+                order_id,
+                self.venda_pagamento,
+                self.venda_receita.strip() or None,
+            )
+            self.mensagem = "Venda confirmada."
+            self.venda_produto_id = ""
+            self.venda_quantidade = "1"
+            self.venda_cliente_id = ""
+            self.venda_receita = ""
+            self.venda_itens = []
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except (XanoError, KeyError, TypeError, ValueError) as exc:
+            self.mensagem = exc.message if isinstance(exc, XanoError) else "Não foi possível concluir a venda."
+        return None
+
+    @rx.event
+    def load_sales(self) -> rx.event.EventSpec | None:
+        redirect = self.load_session()
+        if redirect is not None:
+            return redirect
+        try:
+            client = XanoClient()
+            sales, payments = client.list_sale_history(
+                self._token,
+                is_gestor=self.is_gestor,
+            )
+            orders, items = client.list_orders(self._token, is_gestor=self.is_gestor)
+            orders_by_id = {order.id: order for order in orders}
+            payments_by_sale = {
+                int(payment["id_venda"]): str(payment.get("forma_pagamento") or "")
+                for payment in payments
+            }
+            self.vendas = [
+                {
+                    "id": str(sale.id),
+                    "pedido": str(sale.id_pedido),
+                    "total": f"{sale.valor_total:.2f}",
+                    "status": sale.status,
+                    "data": sale.data_venda,
+                    "canal": orders_by_id.get(sale.id_pedido).canal
+                    if sale.id_pedido in orders_by_id
+                    else "",
+                    "atendente": str(orders_by_id.get(sale.id_pedido).id_funcionario)
+                    if sale.id_pedido in orders_by_id
+                    else "",
+                    "pagamento": payments_by_sale.get(sale.id, ""),
+                }
+                for sale in sales
+            ]
+            self.pedidos = [
+                {
+                    "id": str(order.id),
+                    "cliente": str(order.id_cliente or "balcão"),
+                    "status": order.status,
+                    "canal": order.canal,
+                    "data": order.data_pedido,
+                }
+                for order in orders
+            ]
+            self.itens_pedido = [
+                {
+                    "pedido": str(item["id_pedido"]),
+                    "produto": str(item["id_produto"]),
+                    "quantidade": str(item["quantidade"]),
+                }
+                for item in items
+            ]
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -440,6 +594,16 @@ def login_page() -> rx.Component:
                 value=State.login_input,
                 on_change=State.set_login_input,
             ),
+            rx.button("Adicionar item", on_click=State.add_sale_item),
+            rx.foreach(
+                State.venda_itens,
+                lambda item: rx.text(
+                    "Produto ",
+                    item["id_produto"],
+                    " - Quantidade: ",
+                    item["quantidade"],
+                ),
+            ),
             rx.input(
                 placeholder="Senha",
                 type="password",
@@ -463,8 +627,12 @@ def navigation() -> rx.Component:
             rx.hstack(
                 rx.link("Painel", href="/dashboard"),
                 rx.link("Produtos", href="/produtos"),
+                rx.link("Vendas", href="/vendas"),
             ),
-            rx.text("Atendimento"),
+            rx.hstack(
+                rx.link("Atendimento", href="/atendimento"),
+                rx.link("Minhas vendas", href="/vendas"),
+            ),
         ),
         rx.link("Estoque", href="/estoque"),
         rx.link("Minha conta", href="/minha-conta"),
@@ -673,10 +841,127 @@ def stock_page() -> rx.Component:
     )
 
 
+def sale_form() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Registrar atendimento"),
+        rx.input(
+            placeholder="ID do produto",
+            value=State.venda_produto_id,
+            on_change=lambda value: State.set_sale_field("venda_produto_id", value),
+        ),
+        rx.input(
+            placeholder="Quantidade",
+            value=State.venda_quantidade,
+            on_change=lambda value: State.set_sale_field("venda_quantidade", value),
+        ),
+        rx.button("Adicionar item", on_click=State.add_sale_item),
+        rx.foreach(
+            State.venda_itens,
+            lambda item: rx.text(
+                "Produto ",
+                item["id_produto"],
+                " - Quantidade: ",
+                item["quantidade"],
+            ),
+        ),
+        rx.input(
+            placeholder="ID do cliente (opcional para produtos comuns)",
+            value=State.venda_cliente_id,
+            on_change=lambda value: State.set_sale_field("venda_cliente_id", value),
+        ),
+        rx.select(
+            ["presencial", "online"],
+            value=State.venda_canal,
+            on_change=lambda value: State.set_sale_field("venda_canal", value),
+        ),
+        rx.select(
+            ["dinheiro", "cartão", "pix"],
+            value=State.venda_pagamento,
+            on_change=lambda value: State.set_sale_field("venda_pagamento", value),
+        ),
+        rx.input(
+            placeholder="Número da receita (se necessário)",
+            value=State.venda_receita,
+            on_change=lambda value: State.set_sale_field("venda_receita", value),
+        ),
+        rx.button("Confirmar venda", on_click=State.create_sale),
+        width="100%",
+        max_width="32rem",
+    )
+
+
+def sales_history() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Histórico de vendas"),
+        rx.foreach(
+            State.vendas,
+            lambda sale: rx.hstack(
+                rx.text("Venda ", sale["id"]),
+                rx.text("Pedido ", sale["pedido"]),
+                rx.text("Total: R$ ", sale["total"]),
+                rx.text("Canal: ", sale["canal"]),
+                rx.text("Atendente: ", sale["atendente"]),
+                rx.text("Pagamento: ", sale["pagamento"]),
+                rx.text(sale["status"]),
+                rx.text(sale["data"]),
+                width="100%",
+            ),
+        ),
+        rx.heading("Pedidos e itens", size="5"),
+        rx.foreach(
+            State.pedidos,
+            lambda order: rx.vstack(
+                rx.text(
+                    "Pedido ",
+                    order["id"],
+                    " - Cliente: ",
+                    order["cliente"],
+                    " - ",
+                    order["status"],
+                    " - ",
+                    order["canal"],
+                ),
+                rx.foreach(
+                    State.itens_pedido,
+                    lambda item: rx.cond(
+                        item["pedido"] == order["id"],
+                        rx.text(
+                            "Produto ",
+                            item["produto"],
+                            " - Quantidade: ",
+                            item["quantidade"],
+                        ),
+                        rx.fragment(),
+                    ),
+                ),
+                width="100%",
+            ),
+        ),
+        rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+        width="100%",
+    )
+
+
+def attendance_page() -> rx.Component:
+    return protected_layout(
+        rx.cond(
+            State.is_gestor,
+            rx.text(FORBIDDEN_MESSAGE),
+            sale_form(),
+        )
+    )
+
+
+def sales_page() -> rx.Component:
+    return protected_layout(sales_history())
+
+
 app = rx.App()
 app.add_page(login_page, route="/login")
 app.add_page(dashboard_page, route="/dashboard", on_load=State.load_dashboard)
 app.add_page(account_page, route="/minha-conta", on_load=State.load_session)
 app.add_page(products_page, route="/produtos", on_load=State.load_products)
 app.add_page(stock_page, route="/estoque", on_load=State.load_products)
+app.add_page(attendance_page, route="/atendimento", on_load=State.load_session)
+app.add_page(sales_page, route="/vendas", on_load=State.load_sales)
 app.add_page(login_page, route="/")

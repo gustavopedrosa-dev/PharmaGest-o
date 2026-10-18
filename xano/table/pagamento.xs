@@ -7,7 +7,11 @@ table pagamento {
     int id_venda {
       table = "venda"
     }
-  
+
+    int? id_funcionario {
+      table = "funcionario"
+    }
+
     enum? forma_pagamento {
       values = ["dinheiro", "cartão", "pix", "convênio"]
     }
@@ -18,6 +22,7 @@ table pagamento {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "id_venda", op: "asc"}]}
+    {type: "btree", field: [{name: "id_funcionario", op: "asc"}]}
   ]
 
   tags = ["modulo de venda", "farmagestão"]
