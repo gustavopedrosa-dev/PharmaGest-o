@@ -33,6 +33,12 @@ O pedido será criado como `pendente`, com itens e preços capturados no momento
 
 A confirmação fará validação de todos os produtos, cliente/receita e pagamento antes de editar qualquer registro; em seguida, dentro de uma transação, reduzirá cada estoque, criará venda/pagamento/receita e confirmará o pedido. A operação reutilizará a mesma lógica de estoque sem executar transações aninhadas que possam deixar etapas parciais.
 
+### Serialização técnica do estoque
+
+Como a atualização por leitura seguida de edição permitiu uma atualização perdida sob confirmações concorrentes no workspace Xano, a confirmação adquirirá locks técnicos únicos por produto dentro da mesma transação. A inserção do lock único serializa disputas pelo produto; a baixa, criação dos registros da venda e liberação dos locks ocorrem antes do commit. A tabela técnica não representa movimentação histórica nem altera o escopo de lotes.
+
+Após a liberação, o registro do lock será reutilizado na próxima confirmação do mesmo produto, evitando que vendas repetidas esgotem a combinação única de produto e estado. A tentativa de adquirir um lock ativo continua protegida pelo índice único.
+
 ### Autorização derivada da sessão
 
 O backend obterá `id_funcionario` e perfil do token autenticado. O colaborador poderá criar, confirmar e consultar os próprios pedidos/vendas; o gestor poderá consultar, mas não registrar atendimento. O frontend ocultará ações incompatíveis, porém cada endpoint repetirá a checagem no backend.

@@ -132,12 +132,12 @@ query "vendas/pedido/{id}/confirmar" verb=POST {
               field_name = "id"
               field_value = $item.id_produto
               output = ["id", "quantidade_estoque", "ativo"]
-            } as $produto_atual
+            } as $produto_baixado
 
             precondition (
-              $produto_atual != null &&
-              $produto_atual.ativo == true &&
-              $produto_atual.quantidade_estoque >= $item.quantidade
+              $produto_baixado != null &&
+              $produto_baixado.ativo == true &&
+              $produto_baixado.quantidade_estoque >= $item.quantidade
             ) {
               error_type = "inputerror"
               error = "Estoque insuficiente ou produto indisponível."
@@ -147,9 +147,54 @@ query "vendas/pedido/{id}/confirmar" verb=POST {
               field_name = "id"
               field_value = $item.id_produto
               data = {
-                quantidade_estoque: $produto_atual.quantidade_estoque - $item.quantidade
+                quantidade_estoque: $produto_baixado.quantidade_estoque - $item.quantidade
               }
-            } as $produto_baixado
+            } as $produto_atualizado
+          }
+        }
+
+        db.query "venda" {
+          where = $db.venda.id_pedido == $pedido.id
+          return = {type: "exists"}
+        } as $venda_existente
+
+        precondition (!$venda_existente) {
+          error_type = "accessdenied"
+          error = "O pedido já possui uma venda confirmada."
+        }
+
+        foreach ($itens) {
+          each as $item_lock {
+            db.query "estoque_lock" {
+              where = (
+                $db.estoque_lock.id_produto == $item_lock.id_produto &&
+                $db.estoque_lock.status == "liberado"
+              )
+              output = ["id"]
+              return = {type: "single"}
+            } as $lock_reutilizavel
+
+            conditional {
+              if ($lock_reutilizavel != null) {
+                db.edit "estoque_lock" {
+                  field_name = "id"
+                  field_value = $lock_reutilizavel.id
+                  data = {
+                    status: "ativo",
+                    criado_em: now
+                  }
+                } as $lock_adquirido
+              }
+              else {
+                db.add "estoque_lock" {
+                  data = {
+                    id_produto: $item_lock.id_produto,
+                    status: "ativo",
+                    criado_em: now
+                  }
+                } as $lock_adquirido
+              }
+            }
           }
         }
 
@@ -210,6 +255,25 @@ query "vendas/pedido/{id}/confirmar" verb=POST {
           field_value = $pedido.id
           data = {status: "confirmado"}
         } as $pedido_confirmado
+
+        foreach ($itens) {
+          each as $item_unlock {
+            db.query "estoque_lock" {
+              where = (
+                $db.estoque_lock.id_produto == $item_unlock.id_produto &&
+                $db.estoque_lock.status == "ativo"
+              )
+              output = ["id"]
+              return = {type: "single"}
+            } as $lock_ativo
+
+            db.edit "estoque_lock" {
+              field_name = "id"
+              field_value = $lock_ativo.id
+              data = {status: "liberado"}
+            } as $lock_liberado
+          }
+        }
       }
     }
   }

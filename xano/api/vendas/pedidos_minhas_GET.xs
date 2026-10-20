@@ -24,7 +24,7 @@ query "vendas/meus-pedidos" verb=GET {
     } as $pedidos
 
     db.query "item_pedido" {
-      where = $db.item_pedido.id_pedido.id_funcionario == $sessao.id_funcionario
+      where = $db.item_pedido.id_pedido in ($pedidos|map:"id")
       return = {type: "list"}
       output = [
         "id",

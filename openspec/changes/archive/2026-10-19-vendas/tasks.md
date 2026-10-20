@@ -13,8 +13,8 @@
 
 ## 3. Confirmação, pagamento e estoque
 
-- [ ] 3.1 Criar função transacional de confirmação que revalide estado, itens, produtos ativos e estoque antes de alterar qualquer registro; verificar falha sem alterações.
-- [ ] 3.2 Integrar a baixa transacional de todos os produtos à confirmação e impedir estoque negativo, incluindo concorrência sobre o último saldo; validar saldo e rollback.
+- [x] 3.1 Criar função transacional de confirmação que revalide estado, itens, produtos ativos e estoque antes de alterar qualquer registro; verificar falha sem alterações.
+- [x] 3.2 Integrar a baixa transacional de todos os produtos à confirmação e impedir estoque negativo, incluindo concorrência sobre o último saldo; validar saldo e rollback.
 - [x] 3.3 Criar endpoint de confirmação para colaborador com forma de pagamento em dinheiro, cartão ou Pix, calculando total no backend e criando venda/pagamento em uma operação; verificar HTTP 200 e persistência consistente.
 - [x] 3.4 Rejeitar quantidade insuficiente, pagamento inválido, confirmação repetida e pedido cancelado; verificar códigos 4xx e ausência de venda, pagamento ou baixa parcial.
 - [x] 3.5 Impedir edição e exclusão de vendas, itens, pagamentos e receitas após confirmação; verificar que endpoints administrativos inexistentes ou protegidos não alteram histórico.
@@ -22,8 +22,8 @@
 ## 4. Medicamentos controlados
 
 - [x] 4.1 Exigir cliente ativo e número de receita para pedidos que contenham produto controlado; validar que produto comum continua aceitando cliente balcão.
-- [ ] 4.2 Criar receita e itens de receita para cada controlado confirmado, vinculando cliente, produto e quantidade vendida na mesma transação; verificar rollback quando o vínculo falhar.
-- [ ] 4.3 Cobrir contrato HTTP de venda controlada com e sem cliente, com e sem receita e com múltiplos controlados; confirmar estoque e histórico em cada cenário.
+- [x] 4.2 Criar receita e itens de receita para cada controlado confirmado, vinculando cliente, produto e quantidade vendida na mesma transação; verificar rollback quando o vínculo falhar.
+- [x] 4.3 Cobrir contrato HTTP de venda controlada com e sem cliente, com e sem receita e com múltiplos controlados; confirmar estoque e histórico em cada cenário.
 
 ## 5. Integração Reflex
 
@@ -34,6 +34,6 @@
 
 ## 6. Verificação integrada
 
-- [ ] 6.1 Executar contrato HTTP autenticado para pedidos, confirmação, pagamentos, permissões, estoque insuficiente, concorrência e imutabilidade do histórico.
-- [ ] 6.2 Executar fluxo ponta a ponta no Reflex com contas temporárias de gestor e colaborador, incluindo venda comum, venda controlada, consulta, tentativa indevida e logout; inativar as contas ao final.
+- [x] 6.1 Executar contrato HTTP autenticado para pedidos, confirmação, pagamentos, permissões, estoque insuficiente, concorrência e imutabilidade do histórico.
+- [x] 6.2 Executar fluxo ponta a ponta no Reflex com contas temporárias de gestor e colaborador, incluindo venda comum, venda controlada, consulta, tentativa indevida e logout; inativar as contas ao final.
 - [x] 6.3 Executar compilação Reflex, testes unitários do cliente, validação OpenSpec estrita, `git diff --check` e `xano workspace push --dry-run`; confirmar ausência de credenciais e tabelas fora do escopo.

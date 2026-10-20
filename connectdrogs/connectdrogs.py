@@ -594,16 +594,6 @@ def login_page() -> rx.Component:
                 value=State.login_input,
                 on_change=State.set_login_input,
             ),
-            rx.button("Adicionar item", on_click=State.add_sale_item),
-            rx.foreach(
-                State.venda_itens,
-                lambda item: rx.text(
-                    "Produto ",
-                    item["id_produto"],
-                    " - Quantidade: ",
-                    item["quantidade"],
-                ),
-            ),
             rx.input(
                 placeholder="Senha",
                 type="password",
