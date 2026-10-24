@@ -3,7 +3,14 @@ import json
 
 import httpx
 
-from api.xano import Product, Sale, XanoClient, XanoForbiddenError
+from api.xano import (
+    Address,
+    Customer,
+    Product,
+    Sale,
+    XanoClient,
+    XanoForbiddenError,
+)
 
 
 class ProductClientTests(unittest.TestCase):
@@ -255,6 +262,135 @@ class ProductClientTests(unittest.TestCase):
 
         self.assertEqual(sales[0].id, 12)
         self.assertEqual(payments[0]["forma_pagamento"], "pix")
+
+    def test_customer_and_address_operations_use_expected_contracts(self) -> None:
+        requests: list[tuple[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path))
+            self.assertEqual(request.headers["Authorization"], "Bearer token")
+            if request.method == "POST" and request.url.path.endswith("/clientes/cliente"):
+                self.assertEqual(
+                    json.loads(request.content),
+                    {"nome": "Maria", "cpf": None, "data_nascimento": "1990-01-01"},
+                )
+                return httpx.Response(
+                    200,
+                    json={
+                        "cliente": {
+                            "id": 5,
+                            "nome": "Maria",
+                            "data_nascimento": "1990-01-01",
+                            "ativo": True,
+                        }
+                    },
+                )
+            if request.url.path.endswith("/clientes"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "clientes": [
+                            {
+                                "id": 5,
+                                "nome": "Maria",
+                                "cpf": None,
+                                "data_nascimento": "1990-01-01",
+                                "telefone": None,
+                                "email": None,
+                                "data_cadastro": "2026-10-23T12:00:00Z",
+                                "ativo": True,
+                            }
+                        ]
+                    },
+                )
+            if request.url.path.endswith("/enderecos"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "enderecos": [
+                            {
+                                "id": 8,
+                                "id_cliente": 5,
+                                "logradouro": "Rua A",
+                                "numero": "10",
+                                "bairro": "Centro",
+                                "cidade": "Sao Paulo",
+                                "estado": "SP",
+                                "cep": None,
+                                "complemento": "",
+                            }
+                        ]
+                    },
+                )
+            if request.method == "POST" and request.url.path.endswith("/endereco"):
+                self.assertEqual(json.loads(request.content), {"cidade": "Sao Paulo", "estado": "SP"})
+                return httpx.Response(
+                    200,
+                    json={
+                        "endereco": {
+                            "id": 8,
+                            "id_cliente": 5,
+                            "cidade": "Sao Paulo",
+                            "estado": "SP",
+                        }
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "cliente": {
+                        "id": 5,
+                        "nome": "Maria",
+                        "ativo": False,
+                    }
+                },
+            )
+
+        client = XanoClient(
+            base_url="https://example.test",
+            transport=httpx.MockTransport(handler),
+        )
+        customers = client.list_customers("token")
+        created = client.create_customer(
+            "token",
+            {"nome": "Maria", "cpf": None, "data_nascimento": "1990-01-01"},
+        )
+        updated = client.update_customer("token", 5, {"nome": "Maria"})
+        deactivated = client.deactivate_customer("token", 5)
+        addresses = client.list_addresses("token", 5)
+        address = client.create_address(
+            "token",
+            5,
+            {"cidade": "Sao Paulo", "estado": "SP"},
+        )
+
+        self.assertEqual(customers[0], Customer(5, "Maria", "", "1990-01-01", "", "", "2026-10-23T12:00:00Z", True))
+        self.assertEqual(created.id, 5)
+        self.assertEqual(updated.id, 5)
+        self.assertFalse(deactivated.ativo)
+        self.assertEqual(addresses[0], Address(8, 5, "Rua A", "10", "Centro", "Sao Paulo", "SP", "", ""))
+        self.assertEqual(address.id_cliente, 5)
+        self.assertEqual(
+            requests,
+            [
+                ("GET", "/api:n8EZtgGQ/clientes"),
+                ("POST", "/api:n8EZtgGQ/clientes/cliente"),
+                ("PATCH", "/api:n8EZtgGQ/clientes/cliente/5"),
+                ("POST", "/api:n8EZtgGQ/clientes/cliente/5/inativar"),
+                ("GET", "/api:n8EZtgGQ/clientes/cliente/5/enderecos"),
+                ("POST", "/api:n8EZtgGQ/clientes/cliente/5/endereco"),
+            ],
+        )
+
+    def test_customer_list_preserves_forbidden_error(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"message": "forbidden"})
+
+        with self.assertRaises(XanoForbiddenError):
+            XanoClient(
+                base_url="https://example.test",
+                transport=httpx.MockTransport(handler),
+            ).list_customers("token")
 
 
 if __name__ == "__main__":

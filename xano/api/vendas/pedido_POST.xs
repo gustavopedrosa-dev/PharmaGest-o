@@ -20,6 +20,15 @@ query "vendas/pedido" verb=POST {
       error = "Informe ao menos um item."
     }
 
+    var $quantidade_itens_unicos {
+      value = $input.itens|map:$$.id_produto|unique|count
+    }
+
+    precondition (($input.itens|count) == $quantidade_itens_unicos) {
+      error_type = "inputerror"
+      error = "O mesmo produto não pode aparecer duas vezes no pedido."
+    }
+
     conditional {
       if ($input.id_cliente != null) {
         db.get "cliente" {
@@ -52,18 +61,6 @@ query "vendas/pedido" verb=POST {
         foreach ($input.itens) {
           each as $item {
             math.add $quantidade_itens { value = 1 }
-            db.query "item_pedido" {
-              where = (
-                $db.item_pedido.id_pedido == $pedido.id &&
-                $db.item_pedido.id_produto == $item.id_produto
-              )
-              return = {type: "exists"}
-            } as $produto_repetido
-
-            precondition (!$produto_repetido) {
-              error_type = "inputerror"
-              error = "O mesmo produto não pode aparecer duas vezes no pedido."
-            }
 
             function.run "Vendas/validate_order_item" {
               input = {

@@ -68,6 +68,31 @@ class Category:
 
 
 @dataclass(frozen=True)
+class Customer:
+    id: int
+    nome: str
+    cpf: str
+    data_nascimento: str
+    telefone: str
+    email: str
+    data_cadastro: str
+    ativo: bool
+
+
+@dataclass(frozen=True)
+class Address:
+    id: int
+    id_cliente: int
+    logradouro: str
+    numero: str
+    bairro: str
+    cidade: str
+    estado: str
+    cep: str
+    complemento: str
+
+
+@dataclass(frozen=True)
 class Sale:
     id: int
     id_pedido: int
@@ -258,6 +283,67 @@ class XanoClient:
         )
         return self._category_from_payload(payload["categoria"])
 
+    def list_customers(self, token: str) -> list[Customer]:
+        payload = self._request("GET", "/api:n8EZtgGQ/clientes", token)
+        return [self._customer_from_payload(item) for item in payload["clientes"]]
+
+    def create_customer(
+        self,
+        token: str,
+        customer: dict[str, Any],
+    ) -> Customer:
+        payload = self._request(
+            "POST",
+            "/api:n8EZtgGQ/clientes/cliente",
+            token,
+            json=customer,
+        )
+        return self._customer_from_payload(payload["cliente"])
+
+    def update_customer(
+        self,
+        token: str,
+        customer_id: int,
+        customer: dict[str, Any],
+    ) -> Customer:
+        payload = self._request(
+            "PATCH",
+            f"/api:n8EZtgGQ/clientes/cliente/{customer_id}",
+            token,
+            json=customer,
+        )
+        return self._customer_from_payload(payload["cliente"])
+
+    def deactivate_customer(self, token: str, customer_id: int) -> Customer:
+        payload = self._request(
+            "POST",
+            f"/api:n8EZtgGQ/clientes/cliente/{customer_id}/inativar",
+            token,
+        )
+        return self._customer_from_payload(payload["cliente"])
+
+    def list_addresses(self, token: str, customer_id: int) -> list[Address]:
+        payload = self._request(
+            "GET",
+            f"/api:n8EZtgGQ/clientes/cliente/{customer_id}/enderecos",
+            token,
+        )
+        return [self._address_from_payload(item) for item in payload["enderecos"]]
+
+    def create_address(
+        self,
+        token: str,
+        customer_id: int,
+        address: dict[str, Any],
+    ) -> Address:
+        payload = self._request(
+            "POST",
+            f"/api:n8EZtgGQ/clientes/cliente/{customer_id}/endereco",
+            token,
+            json=address,
+        )
+        return self._address_from_payload(payload["endereco"])
+
     def create_order(
         self,
         token: str,
@@ -383,6 +469,33 @@ class XanoClient:
             id=int(payload["id"]),
             nome=str(payload.get("nome") or ""),
             ativo=bool(payload.get("ativo", True)),
+        )
+
+    @staticmethod
+    def _customer_from_payload(payload: dict[str, Any]) -> Customer:
+        return Customer(
+            id=int(payload["id"]),
+            nome=str(payload.get("nome") or ""),
+            cpf=str(payload.get("cpf") or ""),
+            data_nascimento=str(payload.get("data_nascimento") or ""),
+            telefone=str(payload.get("telefone") or ""),
+            email=str(payload.get("email") or ""),
+            data_cadastro=str(payload.get("data_cadastro") or ""),
+            ativo=bool(payload.get("ativo", True)),
+        )
+
+    @staticmethod
+    def _address_from_payload(payload: dict[str, Any]) -> Address:
+        return Address(
+            id=int(payload["id"]),
+            id_cliente=int(payload["id_cliente"]),
+            logradouro=str(payload.get("logradouro") or ""),
+            numero=str(payload.get("numero") or ""),
+            bairro=str(payload.get("bairro") or ""),
+            cidade=str(payload.get("cidade") or ""),
+            estado=str(payload.get("estado") or ""),
+            cep=str(payload.get("cep") or ""),
+            complemento=str(payload.get("complemento") or ""),
         )
 
     @staticmethod

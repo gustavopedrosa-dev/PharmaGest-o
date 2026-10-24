@@ -8,6 +8,8 @@ from api.xano import (
     FORBIDDEN_MESSAGE,
     SESSION_EXPIRED_MESSAGE,
     UNAVAILABLE_MESSAGE,
+    Address,
+    Customer,
     Session,
     XanoClient,
     XanoError,
@@ -38,6 +40,8 @@ class State(rx.State):
     vendas: list[dict[str, str]] = []
     pedidos: list[dict[str, str]] = []
     itens_pedido: list[dict[str, str]] = []
+    clientes: list[dict[str, str]] = []
+    enderecos: list[dict[str, str]] = []
     produto_id: str = ""
     categoria_id: str = ""
     produto_categoria_id: str = ""
@@ -57,6 +61,19 @@ class State(rx.State):
     venda_pagamento: str = "dinheiro"
     venda_receita: str = ""
     venda_itens: list[dict[str, str]] = []
+    cliente_id: str = ""
+    cliente_nome: str = ""
+    cliente_cpf: str = ""
+    cliente_data_nascimento: str = "1990-01-01"
+    cliente_telefone: str = ""
+    cliente_email: str = ""
+    endereco_logradouro: str = ""
+    endereco_numero: str = ""
+    endereco_bairro: str = ""
+    endereco_cidade: str = ""
+    endereco_estado: str = ""
+    endereco_cep: str = ""
+    endereco_complemento: str = ""
 
     @rx.var
     def is_gestor(self) -> bool:
@@ -98,6 +115,12 @@ class State(rx.State):
         self.categoria_nome = value
 
     def set_sale_field(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+
+    def set_customer_field(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+
+    def set_address_field(self, field: str, value: str) -> None:
         setattr(self, field, value)
 
     @rx.event
@@ -234,6 +257,148 @@ class State(rx.State):
         except XanoError as exc:
             self.mensagem = exc.message
         return None
+
+    @rx.event
+    def load_customers(self) -> rx.event.EventSpec | None:
+        redirect = self.load_session()
+        if redirect is not None:
+            return redirect
+        try:
+            self._set_customers(XanoClient().list_customers(self._token))
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+        return None
+
+    @rx.event
+    def create_customer(self) -> None:
+        if self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            customer = XanoClient().create_customer(
+                self._token,
+                self._customer_payload(),
+            )
+            self.clientes = [*self.clientes, self._customer_view(customer)]
+            self.cliente_id = str(customer.id)
+            self.mensagem = "Cliente cadastrado."
+        except ValueError:
+            self.mensagem = "Preencha a data de nascimento no formato AAAA-MM-DD."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def update_customer(self) -> None:
+        if self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            customer_id = int(self.cliente_id)
+            customer = XanoClient().update_customer(
+                self._token,
+                customer_id,
+                self._customer_payload(),
+            )
+            self.clientes = [
+                self._customer_view(customer)
+                if item["id"] == str(customer_id)
+                else item
+                for item in self.clientes
+            ]
+            self.mensagem = "Cliente atualizado."
+        except ValueError:
+            self.mensagem = "Informe um ID e uma data válidos."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def deactivate_customer(self) -> None:
+        if self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            customer_id = int(self.cliente_id)
+            customer = XanoClient().deactivate_customer(self._token, customer_id)
+            self.clientes = [
+                self._customer_view(customer)
+                if item["id"] == str(customer_id)
+                else item
+                for item in self.clientes
+            ]
+            self.mensagem = "Cliente inativado."
+        except ValueError:
+            self.mensagem = "Informe um ID de cliente válido."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def load_addresses(self) -> None:
+        try:
+            customer_id = int(self.cliente_id)
+            self._set_addresses(
+                XanoClient().list_addresses(self._token, customer_id)
+            )
+            self.mensagem = "Enderecos carregados."
+        except ValueError:
+            self.mensagem = "Informe um ID de cliente válido."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def create_address(self) -> None:
+        if self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            customer_id = int(self.cliente_id)
+            address = XanoClient().create_address(
+                self._token,
+                customer_id,
+                self._address_payload(),
+            )
+            self.enderecos = [*self.enderecos, self._address_view(address)]
+            self.mensagem = "Endereco cadastrado."
+        except ValueError:
+            self.mensagem = "Informe um ID de cliente válido."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
 
     @rx.event
     def create_sale(self) -> rx.event.EventSpec | None:
@@ -527,6 +692,26 @@ class State(rx.State):
             "estoque_minimo": int(self.produto_estoque_minimo),
         }
 
+    def _customer_payload(self) -> dict[str, object]:
+        return {
+            "nome": self.cliente_nome,
+            "cpf": self.cliente_cpf or None,
+            "data_nascimento": self.cliente_data_nascimento,
+            "telefone": self.cliente_telefone or None,
+            "email": self.cliente_email or None,
+        }
+
+    def _address_payload(self) -> dict[str, object]:
+        return {
+            "logradouro": self.endereco_logradouro or None,
+            "numero": self.endereco_numero or None,
+            "bairro": self.endereco_bairro or None,
+            "cidade": self.endereco_cidade,
+            "estado": self.endereco_estado,
+            "cep": self.endereco_cep or None,
+            "complemento": self.endereco_complemento,
+        }
+
     def _clear_product_form(self) -> None:
         self.produto_id = ""
         self.produto_categoria_id = ""
@@ -547,6 +732,38 @@ class State(rx.State):
             {"id": str(category.id), "nome": category.nome}
             for category in categories
         ]
+
+    def _set_customers(self, customers: list[Customer]) -> None:
+        self.clientes = [self._customer_view(customer) for customer in customers]
+
+    def _set_addresses(self, addresses: list[Address]) -> None:
+        self.enderecos = [self._address_view(address) for address in addresses]
+
+    @staticmethod
+    def _customer_view(customer: Customer) -> dict[str, str]:
+        return {
+            "id": str(customer.id),
+            "nome": customer.nome,
+            "cpf": customer.cpf,
+            "telefone": customer.telefone,
+            "email": customer.email,
+            "nascimento": customer.data_nascimento,
+            "situacao": "ativo" if customer.ativo else "inativo",
+        }
+
+    @staticmethod
+    def _address_view(address: Address) -> dict[str, str]:
+        return {
+            "id": str(address.id),
+            "cliente": str(address.id_cliente),
+            "logradouro": address.logradouro,
+            "numero": address.numero,
+            "bairro": address.bairro,
+            "cidade": address.cidade,
+            "estado": address.estado,
+            "cep": address.cep,
+            "complemento": address.complemento,
+        }
 
     @staticmethod
     def _product_view(product: object) -> dict[str, str]:
@@ -624,6 +841,7 @@ def navigation() -> rx.Component:
                 rx.link("Minhas vendas", href="/vendas"),
             ),
         ),
+        rx.link("Clientes", href="/clientes"),
         rx.link("Estoque", href="/estoque"),
         rx.link("Minha conta", href="/minha-conta"),
         rx.button("Sair", on_click=State.logout),
@@ -645,6 +863,162 @@ def dashboard_page() -> rx.Component:
         rx.vstack(
             rx.heading("Painel do gestor"),
             rx.text("Bem-vindo, ", State.nome, "."),
+        )
+    )
+
+
+def customer_list() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Clientes", size="5"),
+        rx.foreach(
+            State.clientes,
+            lambda customer: rx.hstack(
+                rx.text(customer["id"], width="3rem"),
+                rx.text(customer["nome"], width="14rem"),
+                rx.text("CPF: ", customer["cpf"]),
+                rx.text("Situacao: ", customer["situacao"]),
+                width="100%",
+            ),
+        ),
+        width="100%",
+    )
+
+
+def customer_form() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Manter cliente", size="5"),
+        rx.input(
+            placeholder="ID do cliente para editar ou inativar",
+            value=State.cliente_id,
+            on_change=lambda value: State.set_customer_field("cliente_id", value),
+        ),
+        rx.input(
+            placeholder="Nome",
+            value=State.cliente_nome,
+            on_change=lambda value: State.set_customer_field("cliente_nome", value),
+        ),
+        rx.input(
+            placeholder="CPF",
+            value=State.cliente_cpf,
+            on_change=lambda value: State.set_customer_field("cliente_cpf", value),
+        ),
+        rx.input(
+            placeholder="Data de nascimento (AAAA-MM-DD)",
+            value=State.cliente_data_nascimento,
+            on_change=lambda value: State.set_customer_field(
+                "cliente_data_nascimento", value
+            ),
+        ),
+        rx.input(
+            placeholder="Telefone",
+            value=State.cliente_telefone,
+            on_change=lambda value: State.set_customer_field(
+                "cliente_telefone", value
+            ),
+        ),
+        rx.input(
+            placeholder="E-mail",
+            value=State.cliente_email,
+            on_change=lambda value: State.set_customer_field("cliente_email", value),
+        ),
+        rx.hstack(
+            rx.button("Cadastrar", on_click=State.create_customer),
+            rx.button("Atualizar", on_click=State.update_customer),
+            rx.button("Inativar", on_click=State.deactivate_customer),
+        ),
+        width="100%",
+        max_width="32rem",
+    )
+
+
+def address_section() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Enderecos", size="5"),
+        rx.button("Carregar enderecos", on_click=State.load_addresses),
+        rx.foreach(
+            State.enderecos,
+            lambda address: rx.text(
+                address["id"],
+                " - ",
+                address["logradouro"],
+                ", ",
+                address["numero"],
+                " - ",
+                address["cidade"],
+                "/",
+                address["estado"],
+            ),
+        ),
+        rx.cond(
+            State.is_gestor,
+            rx.fragment(),
+            rx.vstack(
+                rx.input(
+                    placeholder="Logradouro",
+                    value=State.endereco_logradouro,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_logradouro", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="Numero",
+                    value=State.endereco_numero,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_numero", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="Bairro",
+                    value=State.endereco_bairro,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_bairro", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="Cidade",
+                    value=State.endereco_cidade,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_cidade", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="Estado",
+                    value=State.endereco_estado,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_estado", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="CEP",
+                    value=State.endereco_cep,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_cep", value
+                    ),
+                ),
+                rx.input(
+                    placeholder="Complemento",
+                    value=State.endereco_complemento,
+                    on_change=lambda value: State.set_address_field(
+                        "endereco_complemento", value
+                    ),
+                ),
+                rx.button("Cadastrar endereco", on_click=State.create_address),
+                width="100%",
+                max_width="32rem",
+            ),
+        ),
+        width="100%",
+    )
+
+
+def customers_page() -> rx.Component:
+    return protected_layout(
+        rx.vstack(
+            rx.heading("Gestao de clientes"),
+            customer_list(),
+            rx.cond(State.is_gestor, rx.fragment(), customer_form()),
+            address_section(),
+            rx.cond(State.mensagem != "", rx.text(State.mensagem)),
         )
     )
 
@@ -952,6 +1326,7 @@ app.add_page(dashboard_page, route="/dashboard", on_load=State.load_dashboard)
 app.add_page(account_page, route="/minha-conta", on_load=State.load_session)
 app.add_page(products_page, route="/produtos", on_load=State.load_products)
 app.add_page(stock_page, route="/estoque", on_load=State.load_products)
+app.add_page(customers_page, route="/clientes", on_load=State.load_customers)
 app.add_page(attendance_page, route="/atendimento", on_load=State.load_session)
 app.add_page(sales_page, route="/vendas", on_load=State.load_sales)
 app.add_page(login_page, route="/")
