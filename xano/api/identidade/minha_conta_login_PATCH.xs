@@ -8,7 +8,7 @@ query "identidade/minha-conta/login" verb=PATCH {
 
   stack {
     function.run "Identidade/require_active_role" {
-      input = {required_role: ""}
+      input = {required_role: "colaborador"}
     } as $sessao
 
     db.get "usuario" {

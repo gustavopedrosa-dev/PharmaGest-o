@@ -6,6 +6,7 @@ import httpx
 from api.xano import (
     Address,
     Customer,
+    Employee,
     Product,
     Sale,
     XanoClient,
@@ -391,6 +392,141 @@ class ProductClientTests(unittest.TestCase):
                 base_url="https://example.test",
                 transport=httpx.MockTransport(handler),
             ).list_customers("token")
+
+    def test_employee_operations_normalize_salary_and_credentials(self) -> None:
+        paths: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            paths.append(request.url.path)
+            self.assertEqual(request.headers["Authorization"], "Bearer token")
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "funcionarios": [
+                            {
+                                "id": 4,
+                                "nome": "Colaborador",
+                                "cpf": "123",
+                                "data_nascimento": None,
+                                "telefone": None,
+                                "email": None,
+                                "cargo": "Balconista",
+                                "salario": 2500,
+                                "data_admissao": "2026-11-02T00:00:00Z",
+                            }
+                        ],
+                        "usuarios": [{"id_funcionario": 4, "ativo": False}],
+                    },
+                )
+            if request.method == "POST" and request.url.path.endswith("/funcionario"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "funcionario": {
+                            "id": 4,
+                            "nome": "Colaborador",
+                            "cargo": "Balconista",
+                            "salario": 2500,
+                        },
+                        "acesso": {
+                            "login": "colaborador",
+                            "senha_inicial": "temporary-only",
+                        },
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "funcionario": {
+                        "id": 4,
+                        "nome": "Colaborador atualizado",
+                        "cargo": "Balconista",
+                        "salario": None,
+                    }
+                },
+            )
+
+        client = XanoClient(
+            base_url="https://example.test",
+            transport=httpx.MockTransport(handler),
+        )
+        employees = client.list_employees("token")
+        created, access = client.create_employee("token", {"nome": "Colaborador"})
+        updated = client.update_employee("token", 4, {"nome": "Colaborador atualizado"})
+        deactivated = client.deactivate_employee("token", 4)
+
+        self.assertEqual(
+            employees[0],
+            Employee(4, "Colaborador", "123", "", "", "", "Balconista", 2500.0, "2026-11-02T00:00:00Z", False),
+        )
+        self.assertEqual(created.id, 4)
+        self.assertEqual(access["login"], "colaborador")
+        self.assertEqual(access["senha_inicial"], "temporary-only")
+        self.assertEqual(updated.nome, "Colaborador atualizado")
+        self.assertIsNone(deactivated.salario)
+        self.assertEqual(
+            paths,
+            [
+                "/api:equipe/equipe/funcionarios",
+                "/api:equipe/equipe/funcionario",
+                "/api:equipe/equipe/funcionario/4",
+                "/api:equipe/equipe/funcionario/4/inativar",
+            ],
+        )
+
+    def test_employee_list_preserves_forbidden_error(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"message": "forbidden"})
+
+        with self.assertRaises(XanoForbiddenError):
+            XanoClient(
+                base_url="https://example.test",
+                transport=httpx.MockTransport(handler),
+            ).list_employees("token")
+
+    def test_account_updates_use_identity_contract(self) -> None:
+        requests: list[tuple[str, str, dict[str, object]]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path, json.loads(request.content)))
+            return httpx.Response(
+                200,
+                json={
+                    "sessao": {
+                        "id_usuario": 2,
+                        "id_funcionario": 4,
+                        "nome": "Colaborador",
+                        "login": "novo-login",
+                        "perfil_acesso": "colaborador",
+                    }
+                },
+            )
+
+        client = XanoClient(
+            base_url="https://example.test",
+            transport=httpx.MockTransport(handler),
+        )
+        login = client.update_login("token", "novo-login")
+        password = client.update_password("token", "senha-atual", "senha-nova")
+
+        self.assertEqual(login.perfil_acesso, "colaborador")
+        self.assertEqual(password.login, "novo-login")
+        self.assertEqual(
+            requests,
+            [
+                (
+                    "PATCH",
+                    "/api:identidade/identidade/minha-conta/login",
+                    {"login": "novo-login"},
+                ),
+                (
+                    "PATCH",
+                    "/api:identidade/identidade/minha-conta/senha",
+                    {"senha_atual": "senha-atual", "nova_senha": "senha-nova"},
+                ),
+            ],
+        )
 
 
 if __name__ == "__main__":

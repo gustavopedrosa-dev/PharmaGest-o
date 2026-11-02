@@ -13,19 +13,19 @@ function "Identidade/require_active_role" {
     } as $usuario
 
     precondition ($usuario != null) {
-      error_type = "accessdenied"
+      error_type = "unauthorized"
       error = "Sessão inválida."
     }
 
     precondition ($usuario.ativo == true) {
-      error_type = "accessdenied"
+      error_type = "unauthorized"
       error = "Sessão inválida."
     }
 
     precondition (
       $usuario.perfil_acesso == "gestor" || $usuario.perfil_acesso == "colaborador"
     ) {
-      error_type = "accessdenied"
+      error_type = "unauthorized"
       error = "Sessão inválida."
     }
 

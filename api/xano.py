@@ -93,6 +93,20 @@ class Address:
 
 
 @dataclass(frozen=True)
+class Employee:
+    id: int
+    nome: str
+    cpf: str
+    data_nascimento: str
+    telefone: str
+    email: str
+    cargo: str
+    salario: float | None
+    data_admissao: str
+    ativo: bool = True
+
+
+@dataclass(frozen=True)
 class Sale:
     id: int
     id_pedido: int
@@ -344,6 +358,67 @@ class XanoClient:
         )
         return self._address_from_payload(payload["endereco"])
 
+    def list_employees(self, token: str) -> list[Employee]:
+        payload = self._request("GET", "/api:equipe/equipe/funcionarios", token)
+        active_by_employee = {
+            int(item["id_funcionario"]): bool(item.get("ativo", True))
+            for item in payload.get("usuarios", [])
+        }
+        return [
+            self._employee_from_payload(
+                item,
+                active=active_by_employee.get(int(item["id"]), True),
+            )
+            for item in payload["funcionarios"]
+        ]
+
+    def create_employee(
+        self,
+        token: str,
+        employee: dict[str, Any],
+    ) -> tuple[Employee, dict[str, str]]:
+        payload = self._request(
+            "POST",
+            "/api:equipe/equipe/funcionario",
+            token,
+            json=employee,
+        )
+        return (
+            self._employee_from_payload(payload["funcionario"]),
+            {
+                "login": str(payload["acesso"].get("login") or ""),
+                "senha_inicial": str(payload["acesso"].get("senha_inicial") or ""),
+            },
+        )
+
+    def update_employee(
+        self,
+        token: str,
+        employee_id: int,
+        employee: dict[str, Any],
+    ) -> Employee:
+        payload = self._request(
+            "PATCH",
+            f"/api:equipe/equipe/funcionario/{employee_id}",
+            token,
+            json=employee,
+        )
+        return self._employee_from_payload(
+            payload["funcionario"],
+            active=payload.get("ativo"),
+        )
+
+    def deactivate_employee(self, token: str, employee_id: int) -> Employee:
+        payload = self._request(
+            "POST",
+            f"/api:equipe/equipe/funcionario/{employee_id}/inativar",
+            token,
+        )
+        return self._employee_from_payload(
+            payload["funcionario"],
+            active=payload.get("ativo", False),
+        )
+
     def create_order(
         self,
         token: str,
@@ -496,6 +571,25 @@ class XanoClient:
             estado=str(payload.get("estado") or ""),
             cep=str(payload.get("cep") or ""),
             complemento=str(payload.get("complemento") or ""),
+        )
+
+    @staticmethod
+    def _employee_from_payload(
+        payload: dict[str, Any],
+        active: bool | None = None,
+    ) -> Employee:
+        salario = payload.get("salario")
+        return Employee(
+            id=int(payload["id"]),
+            nome=str(payload.get("nome") or ""),
+            cpf=str(payload.get("cpf") or ""),
+            data_nascimento=str(payload.get("data_nascimento") or ""),
+            telefone=str(payload.get("telefone") or ""),
+            email=str(payload.get("email") or ""),
+            cargo=str(payload.get("cargo") or ""),
+            salario=float(salario) if salario is not None else None,
+            data_admissao=str(payload.get("data_admissao") or ""),
+            ativo=bool(payload.get("ativo", True) if active is None else active),
         )
 
     @staticmethod

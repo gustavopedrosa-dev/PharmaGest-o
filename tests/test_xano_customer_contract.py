@@ -39,6 +39,27 @@ class CustomerXanoContractTests(unittest.TestCase):
         self.assertIn('$cliente.ativo == true', script)
         self.assertIn('error = "O cliente não está ativo."', script)
 
+    def test_employee_provisioning_uses_generated_password_and_role_guards(self) -> None:
+        create_script = read_xano("xano/api/equipe/funcionario_POST.xs")
+        list_script = read_xano("xano/api/equipe/funcionarios_GET.xs")
+        deactivate_script = read_xano("xano/api/equipe/funcionario_inativar_POST.xs")
+        account_login_script = read_xano(
+            "xano/api/identidade/minha_conta_login_PATCH.xs"
+        )
+        account_password_script = read_xano(
+            "xano/api/identidade/minha_conta_senha_PATCH.xs"
+        )
+
+        self.assertIn("security.create_password", create_script)
+        self.assertIn('perfil_acesso: "colaborador"', create_script)
+        self.assertIn("db.transaction", create_script)
+        self.assertIn('required_role: "gestor"', create_script)
+        self.assertIn('required_role: "gestor"', list_script)
+        self.assertIn('required_role: "gestor"', deactivate_script)
+        self.assertIn('required_role: "colaborador"', account_login_script)
+        self.assertIn('required_role: "colaborador"', account_password_script)
+        self.assertIn("security.check_password", account_password_script)
+
 
 if __name__ == "__main__":
     unittest.main()

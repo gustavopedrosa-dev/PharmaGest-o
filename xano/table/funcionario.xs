@@ -9,6 +9,7 @@ table funcionario {
     text? telefone
     email? email
     text? cargo
+    decimal? salario
     timestamp data_admissao
   }
 

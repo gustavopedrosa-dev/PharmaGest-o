@@ -10,6 +10,7 @@ from api.xano import (
     UNAVAILABLE_MESSAGE,
     Address,
     Customer,
+    Employee,
     Session,
     XanoClient,
     XanoError,
@@ -42,6 +43,9 @@ class State(rx.State):
     itens_pedido: list[dict[str, str]] = []
     clientes: list[dict[str, str]] = []
     enderecos: list[dict[str, str]] = []
+    funcionarios: list[dict[str, str]] = []
+    acesso_inicial: dict[str, str] = {}
+    confirmando_inativacao: bool = False
     produto_id: str = ""
     categoria_id: str = ""
     produto_categoria_id: str = ""
@@ -74,6 +78,15 @@ class State(rx.State):
     endereco_estado: str = ""
     endereco_cep: str = ""
     endereco_complemento: str = ""
+    funcionario_id: str = ""
+    funcionario_nome: str = ""
+    funcionario_cpf: str = ""
+    funcionario_data_nascimento: str = ""
+    funcionario_telefone: str = ""
+    funcionario_email: str = ""
+    funcionario_cargo: str = ""
+    funcionario_salario: str = ""
+    funcionario_login: str = ""
 
     @rx.var
     def is_gestor(self) -> bool:
@@ -121,6 +134,9 @@ class State(rx.State):
         setattr(self, field, value)
 
     def set_address_field(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+
+    def set_employee_field(self, field: str, value: str) -> None:
         setattr(self, field, value)
 
     @rx.event
@@ -275,6 +291,125 @@ class State(rx.State):
         except XanoError as exc:
             self.mensagem = exc.message
         return None
+
+    @rx.event
+    def load_employees(self) -> rx.event.EventSpec | None:
+        redirect = self.load_session()
+        if redirect is not None:
+            return redirect
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return rx.redirect("/minha-conta")
+        try:
+            self._set_employees(XanoClient().list_employees(self._token))
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+        return None
+
+    @rx.event
+    def create_employee(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            employee, access = XanoClient().create_employee(
+                self._token,
+                self._employee_payload(include_login=True),
+            )
+            self.funcionarios = [*self.funcionarios, self._employee_view(employee)]
+            self.acesso_inicial = access
+            self.mensagem = "Funcionário cadastrado. Guarde a senha inicial exibida."
+            self._clear_employee_form()
+        except ValueError:
+            self.mensagem = "Preencha salário e campos numéricos com valores válidos."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def update_employee(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            employee_id = int(self.funcionario_id)
+            employee = XanoClient().update_employee(
+                self._token,
+                employee_id,
+                self._employee_payload(include_login=False),
+            )
+            self.funcionarios = [
+                self._employee_view(employee)
+                if item["id"] == str(employee_id)
+                else item
+                for item in self.funcionarios
+            ]
+            self.mensagem = "Funcionário atualizado."
+        except ValueError:
+            self.mensagem = "Informe um ID e salário válidos."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def deactivate_employee(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            employee_id = int(self.funcionario_id)
+            employee = XanoClient().deactivate_employee(self._token, employee_id)
+            self.funcionarios = [
+                self._employee_view(employee)
+                if item["id"] == str(employee_id)
+                else item
+                for item in self.funcionarios
+            ]
+            self.mensagem = "Funcionário inativado."
+            self.confirmando_inativacao = False
+        except ValueError:
+            self.mensagem = "Informe um ID de funcionário válido."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def request_deactivate_employee(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            int(self.funcionario_id)
+        except ValueError:
+            self.mensagem = "Informe um ID de funcionário válido."
+            return
+        self.confirmando_inativacao = True
+
+    @rx.event
+    def cancel_deactivate_employee(self) -> None:
+        self.confirmando_inativacao = False
 
     @rx.event
     def create_customer(self) -> None:
@@ -712,6 +847,33 @@ class State(rx.State):
             "complemento": self.endereco_complemento,
         }
 
+    def _employee_payload(self, *, include_login: bool) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "nome": self.funcionario_nome,
+            "cpf": self.funcionario_cpf,
+            "data_nascimento": self.funcionario_data_nascimento or None,
+            "telefone": self.funcionario_telefone or None,
+            "email": self.funcionario_email or None,
+            "cargo": self.funcionario_cargo or None,
+            "salario": float(self.funcionario_salario)
+            if self.funcionario_salario.strip()
+            else None,
+        }
+        if include_login:
+            payload["login"] = self.funcionario_login
+        return payload
+
+    def _clear_employee_form(self) -> None:
+        self.funcionario_id = ""
+        self.funcionario_nome = ""
+        self.funcionario_cpf = ""
+        self.funcionario_data_nascimento = ""
+        self.funcionario_telefone = ""
+        self.funcionario_email = ""
+        self.funcionario_cargo = ""
+        self.funcionario_salario = ""
+        self.funcionario_login = ""
+
     def _clear_product_form(self) -> None:
         self.produto_id = ""
         self.produto_categoria_id = ""
@@ -739,6 +901,9 @@ class State(rx.State):
     def _set_addresses(self, addresses: list[Address]) -> None:
         self.enderecos = [self._address_view(address) for address in addresses]
 
+    def _set_employees(self, employees: list[Employee]) -> None:
+        self.funcionarios = [self._employee_view(employee) for employee in employees]
+
     @staticmethod
     def _customer_view(customer: Customer) -> dict[str, str]:
         return {
@@ -763,6 +928,22 @@ class State(rx.State):
             "estado": address.estado,
             "cep": address.cep,
             "complemento": address.complemento,
+        }
+
+    @staticmethod
+    def _employee_view(employee: Employee) -> dict[str, str]:
+        return {
+            "id": str(employee.id),
+            "nome": employee.nome,
+            "cpf": employee.cpf,
+            "cargo": employee.cargo,
+            "salario": (
+                f"R$ {employee.salario:.2f}"
+                if employee.salario is not None
+                else ""
+            ),
+            "email": employee.email,
+            "situacao": "ativo" if employee.ativo else "inativo",
         }
 
     @staticmethod
@@ -835,6 +1016,7 @@ def navigation() -> rx.Component:
                 rx.link("Painel", href="/dashboard"),
                 rx.link("Produtos", href="/produtos"),
                 rx.link("Vendas", href="/vendas"),
+                rx.link("Equipe", href="/equipe"),
             ),
             rx.hstack(
                 rx.link("Atendimento", href="/atendimento"),
@@ -843,7 +1025,11 @@ def navigation() -> rx.Component:
         ),
         rx.link("Clientes", href="/clientes"),
         rx.link("Estoque", href="/estoque"),
-        rx.link("Minha conta", href="/minha-conta"),
+        rx.cond(
+            State.is_gestor,
+            rx.fragment(),
+            rx.link("Minha conta", href="/minha-conta"),
+        ),
         rx.button("Sair", on_click=State.logout),
         justify="between",
         width="100%",
@@ -1023,31 +1209,165 @@ def customers_page() -> rx.Component:
     )
 
 
-def account_page() -> rx.Component:
+def employee_list() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Equipe", size="5"),
+        rx.foreach(
+            State.funcionarios,
+            lambda employee: rx.hstack(
+                rx.text(employee["id"], width="3rem"),
+                rx.text(employee["nome"], width="16rem"),
+                rx.text(employee["cargo"], width="12rem"),
+                rx.text(employee["salario"], width="10rem"),
+                rx.text(employee["cpf"]),
+                rx.text(employee["situacao"], width="8rem"),
+                width="100%",
+            ),
+        ),
+        width="100%",
+    )
+
+
+def employee_form() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Manter funcionário", size="5"),
+        rx.input(
+            placeholder="ID para editar ou inativar",
+            value=State.funcionario_id,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_id", value
+            ),
+        ),
+        rx.input(
+            placeholder="Nome",
+            value=State.funcionario_nome,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_nome", value
+            ),
+        ),
+        rx.input(
+            placeholder="CPF",
+            value=State.funcionario_cpf,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_cpf", value
+            ),
+        ),
+        rx.input(
+            placeholder="Data de nascimento (AAAA-MM-DD)",
+            value=State.funcionario_data_nascimento,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_data_nascimento", value
+            ),
+        ),
+        rx.input(
+            placeholder="Telefone",
+            value=State.funcionario_telefone,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_telefone", value
+            ),
+        ),
+        rx.input(
+            placeholder="E-mail",
+            value=State.funcionario_email,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_email", value
+            ),
+        ),
+        rx.input(
+            placeholder="Cargo",
+            value=State.funcionario_cargo,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_cargo", value
+            ),
+        ),
+        rx.input(
+            placeholder="Salário",
+            value=State.funcionario_salario,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_salario", value
+            ),
+        ),
+        rx.input(
+            placeholder="Login inicial (somente cadastro)",
+            value=State.funcionario_login,
+            on_change=lambda value: State.set_employee_field(
+                "funcionario_login", value
+            ),
+        ),
+        rx.hstack(
+            rx.button("Cadastrar", on_click=State.create_employee),
+            rx.button("Atualizar", on_click=State.update_employee),
+            rx.button(
+                "Inativar",
+                on_click=State.request_deactivate_employee,
+            ),
+        ),
+        rx.cond(
+            State.confirmando_inativacao,
+            rx.vstack(
+                rx.text("Confirma a inativação deste funcionário?"),
+                rx.hstack(
+                    rx.button("Cancelar", on_click=State.cancel_deactivate_employee),
+                    rx.button("Confirmar inativação", on_click=State.deactivate_employee),
+                ),
+            ),
+            rx.fragment(),
+        ),
+        rx.cond(
+            State.acesso_inicial != {},
+            rx.vstack(
+                rx.text("Login inicial: ", State.acesso_inicial["login"]),
+                rx.text(
+                    "Senha inicial: ", State.acesso_inicial["senha_inicial"]
+                ),
+            ),
+            rx.fragment(),
+        ),
+        width="100%",
+        max_width="32rem",
+    )
+
+
+def employees_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            rx.heading("Minha conta"),
-            rx.text("Usuário: ", State.login),
-            rx.input(
-                placeholder="Novo login",
-                value=State.novo_login,
-                on_change=State.set_novo_login,
-            ),
-            rx.button("Salvar login", on_click=State.update_login),
-            rx.input(
-                placeholder="Senha atual",
-                type="password",
-                value=State.senha_atual,
-                on_change=State.set_senha_atual,
-            ),
-            rx.input(
-                placeholder="Nova senha",
-                type="password",
-                value=State.nova_senha,
-                on_change=State.set_nova_senha,
-            ),
-            rx.button("Salvar senha", on_click=State.update_password),
+            rx.heading("Gestão da equipe"),
+            employee_list(),
+            employee_form(),
             rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+        )
+    )
+
+
+def account_page() -> rx.Component:
+    return protected_layout(
+        rx.cond(
+            State.is_gestor,
+            rx.text(FORBIDDEN_MESSAGE),
+            rx.vstack(
+                rx.heading("Minha conta"),
+                rx.text("Usuário: ", State.login),
+                rx.input(
+                    placeholder="Novo login",
+                    value=State.novo_login,
+                    on_change=State.set_novo_login,
+                ),
+                rx.button("Salvar login", on_click=State.update_login),
+                rx.input(
+                    placeholder="Senha atual",
+                    type="password",
+                    value=State.senha_atual,
+                    on_change=State.set_senha_atual,
+                ),
+                rx.input(
+                    placeholder="Nova senha",
+                    type="password",
+                    value=State.nova_senha,
+                    on_change=State.set_nova_senha,
+                ),
+                rx.button("Salvar senha", on_click=State.update_password),
+                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+            ),
         ),
     )
 
@@ -1327,6 +1647,7 @@ app.add_page(account_page, route="/minha-conta", on_load=State.load_session)
 app.add_page(products_page, route="/produtos", on_load=State.load_products)
 app.add_page(stock_page, route="/estoque", on_load=State.load_products)
 app.add_page(customers_page, route="/clientes", on_load=State.load_customers)
+app.add_page(employees_page, route="/equipe", on_load=State.load_employees)
 app.add_page(attendance_page, route="/atendimento", on_load=State.load_session)
 app.add_page(sales_page, route="/vendas", on_load=State.load_sales)
 app.add_page(login_page, route="/")
