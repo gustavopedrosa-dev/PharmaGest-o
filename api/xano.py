@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -66,6 +67,16 @@ class Category:
     nome: str
     ativo: bool
 
+
+@dataclass(frozen=True)
+class Supplier:
+    id: int
+    nome: str
+    cnpj: str
+    telefone: str
+    email: str
+    endereco: str
+    prazo_entrega: str
 
 @dataclass(frozen=True)
 class Customer:
@@ -297,6 +308,51 @@ class XanoClient:
         )
         return self._category_from_payload(payload["categoria"])
 
+    def list_suppliers(self, token: str) -> list[Supplier]:
+        payload = self._request(
+            "GET",
+            "/api:94CoO3xX/produtos/fornecedores",
+            token,
+        )
+        return [
+            self._supplier_from_payload(item)
+            for item in payload["fornecedores"]
+        ]
+
+    def create_supplier(
+        self,
+        token: str,
+        supplier: dict[str, Any],
+    ) -> Supplier:
+        payload = self._request(
+            "POST",
+            "/api:94CoO3xX/produtos/fornecedor",
+            token,
+            json=supplier,
+        )
+        return self._supplier_from_payload(payload["fornecedor"])
+
+    def update_supplier(
+        self,
+        token: str,
+        supplier_id: int,
+        supplier: dict[str, Any],
+    ) -> Supplier:
+        payload = self._request(
+            "PATCH",
+            f"/api:94CoO3xX/produtos/fornecedor/{supplier_id}",
+            token,
+            json=supplier,
+        )
+        return self._supplier_from_payload(payload["fornecedor"])
+
+    def delete_supplier(self, token: str, supplier_id: int) -> None:
+        self._request(
+            "DELETE",
+            f"/api:94CoO3xX/produtos/fornecedor/{supplier_id}",
+            token,
+        )
+
     def list_customers(self, token: str) -> list[Customer]:
         payload = self._request("GET", "/api:n8EZtgGQ/clientes", token)
         return [self._customer_from_payload(item) for item in payload["clientes"]]
@@ -512,6 +568,23 @@ class XanoClient:
             list(payload["itens"]),
         )
 
+    def dashboard_summary(
+        self,
+        token: str,
+        *,
+        data_inicio: datetime,
+        data_fim: datetime,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api:8Ji5Nfc2/painel/resumo",
+            token,
+            params={
+                "data_inicio": int(data_inicio.timestamp() * 1000),
+                "data_fim": int(data_fim.timestamp() * 1000),
+            },
+        )
+
     @staticmethod
     def _session_from_payload(payload: dict[str, Any]) -> Session:
         return Session(
@@ -544,6 +617,18 @@ class XanoClient:
             id=int(payload["id"]),
             nome=str(payload.get("nome") or ""),
             ativo=bool(payload.get("ativo", True)),
+        )
+
+    @staticmethod
+    def _supplier_from_payload(payload: dict[str, Any]) -> Supplier:
+        return Supplier(
+            id=int(payload["id"]),
+            nome=str(payload.get("nome") or ""),
+            cnpj=str(payload.get("cnpj") or ""),
+            telefone=str(payload.get("telefone") or ""),
+            email=str(payload.get("email") or ""),
+            endereco=str(payload.get("endereco") or ""),
+            prazo_entrega=str(payload.get("prazo_entrega") or ""),
         )
 
     @staticmethod

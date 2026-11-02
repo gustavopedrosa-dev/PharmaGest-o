@@ -8,6 +8,7 @@ table fornecedor {
     text? telefone
     email email
     text endereco
+    text? prazo_entrega
   }
 
   index = [

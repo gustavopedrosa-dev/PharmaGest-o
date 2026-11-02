@@ -1,5 +1,6 @@
-import unittest
 import json
+import unittest
+from datetime import datetime, timezone
 
 import httpx
 
@@ -11,6 +12,7 @@ from api.xano import (
     Sale,
     XanoClient,
     XanoForbiddenError,
+    XanoUnauthorizedError,
 )
 
 
@@ -527,6 +529,71 @@ class ProductClientTests(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_dashboard_summary_uses_authorized_endpoint_and_period(self) -> None:
+        data_inicio = datetime(2026, 11, 2, tzinfo=timezone.utc)
+        data_fim = datetime(2026, 11, 3, tzinfo=timezone.utc)
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            self.assertEqual(request.url.path, "/api:8Ji5Nfc2/painel/resumo")
+            self.assertEqual(request.headers["Authorization"], "Bearer token")
+            self.assertEqual(
+                dict(request.url.params),
+                {
+                    "data_inicio": str(int(data_inicio.timestamp() * 1000)),
+                    "data_fim": str(int(data_fim.timestamp() * 1000)),
+                },
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "total_vendas": 2,
+                    "valor_total": 50,
+                    "funcionarios_ativos": 2,
+                    "estoque_critico": [{"id": 7, "nome": "Dipirona", "estoque": 3, "minimo": 5}],
+                    "mais_vendidos": [{"id": 7, "nome": "Dipirona", "quantidade": 3}],
+                },
+            )
+
+        summary = XanoClient(
+            base_url="https://example.test",
+            transport=httpx.MockTransport(handler),
+        ).dashboard_summary(
+            "token",
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+        )
+
+        self.assertEqual(summary["total_vendas"], 2)
+        self.assertEqual(summary["valor_total"], 50)
+        self.assertEqual(summary["funcionarios_ativos"], 2)
+        self.assertEqual(summary["estoque_critico"][0]["nome"], "Dipirona")
+        self.assertEqual(summary["mais_vendidos"][0]["nome"], "Dipirona")
+        self.assertEqual(len(requests), 1)
+
+    def test_dashboard_summary_preserves_authentication_errors(self) -> None:
+        data_inicio = datetime(2026, 11, 2, tzinfo=timezone.utc)
+        data_fim = datetime(2026, 11, 3, tzinfo=timezone.utc)
+
+        for status_code, error_type in (
+            (401, XanoUnauthorizedError),
+            (403, XanoForbiddenError),
+        ):
+            with self.subTest(status_code=status_code):
+                client = XanoClient(
+                    base_url="https://example.test",
+                    transport=httpx.MockTransport(
+                        lambda request: httpx.Response(status_code)
+                    ),
+                )
+                with self.assertRaises(error_type):
+                    client.dashboard_summary(
+                        "token",
+                        data_inicio=data_inicio,
+                        data_fim=data_fim,
+                    )
 
 
 if __name__ == "__main__":

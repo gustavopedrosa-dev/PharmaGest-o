@@ -138,3 +138,14 @@ O sistema SHALL remover as tabelas Quick Start `user` e `event_log` e deixar de 
 #### Scenario: Aplicação usa a identidade do domínio
 - **WHEN** uma operação autenticada do FarmaGestão é executada
 - **THEN** a identidade e autorização usam `usuario` vinculada a `funcionario`, sem consultar a tabela `user`
+
+### Requirement: Resumo do painel exige perfil gestor
+O endpoint de resumo do painel SHALL exigir sessão válida e perfil `gestor`, aplicando a autorização no backend independentemente da navegação do Reflex.
+
+#### Scenario: Consulta sem sessão válida
+- **WHEN** uma requisição ao resumo do painel não apresenta token válido
+- **THEN** a API responde HTTP 401 e não retorna indicadores
+
+#### Scenario: Colaborador consulta o resumo
+- **WHEN** uma requisição autenticada com perfil `colaborador` consulta o resumo do painel
+- **THEN** a API responde HTTP 403 e não retorna indicadores

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 import reflex as rx
 
 from api.xano import (
@@ -44,8 +46,16 @@ class State(rx.State):
     clientes: list[dict[str, str]] = []
     enderecos: list[dict[str, str]] = []
     funcionarios: list[dict[str, str]] = []
+    fornecedores: list[dict[str, str]] = []
+    dashboard_total_vendas: int = 0
+    dashboard_valor_total: float = 0.0
+    dashboard_funcionarios_ativos: int = 0
+    dashboard_estoque_critico: list[dict[str, object]] = []
+    dashboard_mais_vendidos: list[dict[str, object]] = []
+    dashboard_carregado: bool = False
     acesso_inicial: dict[str, str] = {}
     confirmando_inativacao: bool = False
+    confirmando_remocao_fornecedor: bool = False
     produto_id: str = ""
     categoria_id: str = ""
     produto_categoria_id: str = ""
@@ -87,6 +97,13 @@ class State(rx.State):
     funcionario_cargo: str = ""
     funcionario_salario: str = ""
     funcionario_login: str = ""
+    fornecedor_id: str = ""
+    fornecedor_nome: str = ""
+    fornecedor_cnpj: str = ""
+    fornecedor_telefone: str = ""
+    fornecedor_email: str = ""
+    fornecedor_endereco: str = ""
+    fornecedor_prazo_entrega: str = ""
 
     @rx.var
     def is_gestor(self) -> bool:
@@ -138,6 +155,12 @@ class State(rx.State):
 
     def set_employee_field(self, field: str, value: str) -> None:
         setattr(self, field, value)
+
+    def set_supplier_field(self, field: str, value: str) -> None:
+        setattr(self, field, value)
+
+    def set_product_supplier(self, value: str) -> None:
+        self.produto_fornecedor_id = value
 
     @rx.event
     def add_sale_item(self) -> None:
@@ -204,8 +227,37 @@ class State(rx.State):
         if redirect is not None:
             return redirect
         if self.perfil_acesso != "gestor":
+            self._clear_dashboard()
             self.mensagem = FORBIDDEN_MESSAGE
             return rx.redirect("/minha-conta")
+        self.dashboard_carregado = False
+        self.mensagem = ""
+        try:
+            agora = datetime.now().astimezone()
+            data_inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+            data_fim = data_inicio + timedelta(days=1)
+            summary = XanoClient().dashboard_summary(
+                self._token,
+                data_inicio=data_inicio,
+                data_fim=data_fim,
+            )
+            self.dashboard_total_vendas = int(summary.get("total_vendas", 0) or 0)
+            self.dashboard_valor_total = float(summary.get("valor_total", 0) or 0)
+            self.dashboard_funcionarios_ativos = int(
+                summary.get("funcionarios_ativos", 0) or 0
+            )
+            self.dashboard_estoque_critico = list(summary.get("estoque_critico", []))
+            self.dashboard_mais_vendidos = list(summary.get("mais_vendidos", []))
+            self.dashboard_carregado = True
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
         return None
 
     @rx.event
@@ -263,6 +315,31 @@ class State(rx.State):
             client = XanoClient()
             self._set_products(client.list_products(self._token))
             self._set_categories(client.list_categories(self._token))
+            if self.is_gestor:
+                self._set_suppliers(client.list_suppliers(self._token))
+            else:
+                self._clear_suppliers()
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+        return None
+
+    @rx.event
+    def load_suppliers(self) -> rx.event.EventSpec | None:
+        redirect = self.load_session()
+        if redirect is not None:
+            return redirect
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return rx.redirect("/minha-conta")
+        try:
+            self._set_suppliers(XanoClient().list_suppliers(self._token))
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -656,6 +733,9 @@ class State(rx.State):
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self.produto_fornecedor_id:
+            self.mensagem = "Selecione um fornecedor cadastrado."
+            return
         try:
             product = XanoClient().create_product(
                 self._token,
@@ -708,6 +788,9 @@ class State(rx.State):
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self.produto_fornecedor_id:
+            self.mensagem = "Selecione um fornecedor cadastrado."
+            return
         try:
             product_id = int(self.produto_id)
             product = XanoClient().update_product(
@@ -731,6 +814,124 @@ class State(rx.State):
         except XanoUnavailableError:
             self.mensagem = UNAVAILABLE_MESSAGE
         except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def select_supplier(self, supplier_id: str) -> None:
+        supplier = next(
+            (item for item in self.fornecedores if item["id"] == supplier_id),
+            None,
+        )
+        if supplier is None:
+            self.mensagem = "Fornecedor não encontrado na lista carregada."
+            return
+        self.fornecedor_id = supplier["id"]
+        self.fornecedor_nome = supplier["nome"]
+        self.fornecedor_cnpj = supplier["cnpj"]
+        self.fornecedor_telefone = supplier["telefone"]
+        self.fornecedor_email = supplier["email"]
+        self.fornecedor_endereco = supplier["endereco"]
+        self.fornecedor_prazo_entrega = supplier["prazo_entrega"]
+        self.mensagem = ""
+
+    @rx.event
+    def create_supplier(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            supplier = XanoClient().create_supplier(
+                self._token,
+                self._supplier_payload(),
+            )
+            self.fornecedores = [
+                *self.fornecedores,
+                self._supplier_view(supplier),
+            ]
+            self._clear_supplier_form()
+            self.mensagem = "Fornecedor cadastrado."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def update_supplier(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            supplier_id = int(self.fornecedor_id)
+            supplier = XanoClient().update_supplier(
+                self._token,
+                supplier_id,
+                self._supplier_payload(),
+            )
+            self.fornecedores = [
+                self._supplier_view(supplier)
+                if item["id"] == str(supplier_id)
+                else item
+                for item in self.fornecedores
+            ]
+            self._clear_supplier_form()
+            self.mensagem = "Fornecedor atualizado."
+        except ValueError:
+            self.mensagem = "Selecione um fornecedor válido para atualizar."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+
+    @rx.event
+    def request_delete_supplier(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            int(self.fornecedor_id)
+        except ValueError:
+            self.mensagem = "Selecione um fornecedor válido para remover."
+            return
+        self.confirmando_remocao_fornecedor = True
+
+    @rx.event
+    def cancel_delete_supplier(self) -> None:
+        self.confirmando_remocao_fornecedor = False
+
+    @rx.event
+    def delete_supplier(self) -> None:
+        if not self.is_gestor:
+            self.mensagem = FORBIDDEN_MESSAGE
+            return
+        try:
+            supplier_id = int(self.fornecedor_id)
+            XanoClient().delete_supplier(self._token, supplier_id)
+            self.fornecedores = [
+                item
+                for item in self.fornecedores
+                if item["id"] != str(supplier_id)
+            ]
+            self._clear_supplier_form()
+            self.confirmando_remocao_fornecedor = False
+            self.mensagem = "Fornecedor removido."
+        except ValueError:
+            self.mensagem = "Selecione um fornecedor válido para remover."
+        except XanoUnauthorizedError:
+            self._expire_session()
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.confirmando_remocao_fornecedor = False
             self.mensagem = exc.message
 
     @rx.event
@@ -904,6 +1105,9 @@ class State(rx.State):
     def _set_employees(self, employees: list[Employee]) -> None:
         self.funcionarios = [self._employee_view(employee) for employee in employees]
 
+    def _set_suppliers(self, suppliers: list[object]) -> None:
+        self.fornecedores = [self._supplier_view(supplier) for supplier in suppliers]
+
     @staticmethod
     def _customer_view(customer: Customer) -> dict[str, str]:
         return {
@@ -947,6 +1151,18 @@ class State(rx.State):
         }
 
     @staticmethod
+    def _supplier_view(supplier: object) -> dict[str, str]:
+        return {
+            "id": str(supplier.id),
+            "nome": supplier.nome,
+            "cnpj": supplier.cnpj,
+            "telefone": supplier.telefone,
+            "email": supplier.email,
+            "endereco": supplier.endereco,
+            "prazo_entrega": supplier.prazo_entrega,
+        }
+
+    @staticmethod
     def _product_view(product: object) -> dict[str, str]:
         return {
             "id": str(product.id),
@@ -968,6 +1184,17 @@ class State(rx.State):
         self.authenticated = True
         self.session_ready = True
         self.mensagem = ""
+        if session.perfil_acesso != "gestor":
+            self._clear_dashboard()
+            self._clear_suppliers()
+
+    def _clear_dashboard(self) -> None:
+        self.dashboard_total_vendas = 0
+        self.dashboard_valor_total = 0.0
+        self.dashboard_funcionarios_ativos = 0
+        self.dashboard_estoque_critico = []
+        self.dashboard_mais_vendidos = []
+        self.dashboard_carregado = False
 
     def logout_local(self) -> None:
         self._token = ""
@@ -976,6 +1203,32 @@ class State(rx.State):
         self.nome = ""
         self.login = ""
         self.perfil_acesso = ""
+        self._clear_dashboard()
+        self._clear_suppliers()
+
+    def _clear_suppliers(self) -> None:
+        self.fornecedores = []
+        self._clear_supplier_form()
+
+    def _clear_supplier_form(self) -> None:
+        self.fornecedor_id = ""
+        self.fornecedor_nome = ""
+        self.fornecedor_cnpj = ""
+        self.fornecedor_telefone = ""
+        self.fornecedor_email = ""
+        self.fornecedor_endereco = ""
+        self.fornecedor_prazo_entrega = ""
+        self.confirmando_remocao_fornecedor = False
+
+    def _supplier_payload(self) -> dict[str, object]:
+        return {
+            "nome": self.fornecedor_nome,
+            "cnpj": self.fornecedor_cnpj,
+            "telefone": self.fornecedor_telefone or None,
+            "email": self.fornecedor_email,
+            "endereco": self.fornecedor_endereco,
+            "prazo_entrega": self.fornecedor_prazo_entrega or None,
+        }
 
     def _expire_session(self) -> None:
         self.logout_local()
@@ -1017,6 +1270,7 @@ def navigation() -> rx.Component:
                 rx.link("Produtos", href="/produtos"),
                 rx.link("Vendas", href="/vendas"),
                 rx.link("Equipe", href="/equipe"),
+                rx.link("Fornecedores", href="/fornecedores"),
             ),
             rx.hstack(
                 rx.link("Atendimento", href="/atendimento"),
@@ -1046,9 +1300,92 @@ def protected_layout(content: rx.Component) -> rx.Component:
 
 def dashboard_page() -> rx.Component:
     return protected_layout(
-        rx.vstack(
+        rx.cond(
+            State.is_gestor,
+            rx.vstack(
             rx.heading("Painel do gestor"),
             rx.text("Bem-vindo, ", State.nome, "."),
+            rx.cond(
+                State.dashboard_carregado,
+                rx.vstack(
+                    rx.hstack(
+                        rx.box(
+                            rx.vstack(
+                                rx.text("Vendas hoje"),
+                                rx.heading(State.dashboard_total_vendas, size="7"),
+                            ),
+                            padding="1rem",
+                            border="1px solid #ddd",
+                            border_radius="12px",
+                            width="100%",
+                        ),
+                        rx.box(
+                            rx.vstack(
+                                rx.text("Faturamento hoje"),
+                                rx.heading(
+                                    f"R$ {State.dashboard_valor_total:.2f}",
+                                    size="7",
+                                ),
+                            ),
+                            padding="1rem",
+                            border="1px solid #ddd",
+                            border_radius="12px",
+                            width="100%",
+                        ),
+                        rx.box(
+                            rx.vstack(
+                                rx.text("Funcionários ativos"),
+                                rx.heading(
+                                    State.dashboard_funcionarios_ativos,
+                                    size="7",
+                                ),
+                            ),
+                            padding="1rem",
+                            border="1px solid #ddd",
+                            border_radius="12px",
+                            width="100%",
+                        ),
+                        spacing="3",
+                        width="100%",
+                        wrap="wrap",
+                    ),
+                    rx.heading("Produtos em alerta", size="5"),
+                    rx.cond(
+                        State.dashboard_estoque_critico.length() > 0,
+                        rx.vstack(
+                            rx.foreach(
+                                State.dashboard_estoque_critico,
+                                lambda produto: rx.text(
+                                    f"{produto['nome']} — estoque {produto['estoque']} / mínimo {produto['minimo']}"
+                                ),
+                            )
+                        ),
+                        rx.text("Nenhum produto em risco de estoque."),
+                    ),
+                    rx.heading("Mais vendidos", size="5"),
+                    rx.cond(
+                        State.dashboard_mais_vendidos.length() > 0,
+                        rx.vstack(
+                            rx.foreach(
+                                State.dashboard_mais_vendidos,
+                                lambda produto: rx.text(
+                                    f"{produto['nome']} — {produto['quantidade']} unidades"
+                                ),
+                            )
+                        ),
+                        rx.text("Ainda não há vendas confirmadas."),
+                    ),
+                ),
+                rx.cond(
+                    State.mensagem != "",
+                    rx.text(State.mensagem, color="red"),
+                    rx.text("Carregando painel..."),
+                ),
+            ),
+            spacing="4",
+                width="100%",
+            ),
+            rx.text(FORBIDDEN_MESSAGE, color="red"),
         )
     )
 
@@ -1339,6 +1676,216 @@ def employees_page() -> rx.Component:
     )
 
 
+def supplier_list() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Fornecedores", size="5"),
+        rx.foreach(
+            State.fornecedores,
+            lambda supplier: rx.hstack(
+                rx.text(supplier["nome"], width="14rem"),
+                rx.text(supplier["cnpj"], width="10rem"),
+                rx.text(supplier["telefone"], width="10rem"),
+                rx.text(supplier["email"], width="16rem"),
+                rx.text(supplier["prazo_entrega"], width="10rem"),
+                rx.button(
+                    "Selecionar",
+                    on_click=lambda: State.select_supplier(supplier["id"]),
+                ),
+                width="100%",
+            ),
+        ),
+        width="100%",
+    )
+
+
+def supplier_form() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Manter fornecedor", size="5"),
+        rx.input(
+            placeholder="ID do fornecedor selecionado",
+            value=State.fornecedor_id,
+            is_read_only=True,
+        ),
+        rx.input(
+            placeholder="Nome",
+            value=State.fornecedor_nome,
+            on_change=lambda value: State.set_supplier_field("fornecedor_nome", value),
+        ),
+        rx.input(
+            placeholder="CNPJ",
+            value=State.fornecedor_cnpj,
+            on_change=lambda value: State.set_supplier_field("fornecedor_cnpj", value),
+        ),
+        rx.input(
+            placeholder="Telefone",
+            value=State.fornecedor_telefone,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_telefone", value
+            ),
+        ),
+        rx.input(
+            placeholder="E-mail",
+            type="email",
+            value=State.fornecedor_email,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_email", value
+            ),
+        ),
+        rx.input(
+            placeholder="Endereço",
+            value=State.fornecedor_endereco,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_endereco", value
+            ),
+        ),
+        rx.input(
+            placeholder="Prazo de entrega (opcional)",
+            value=State.fornecedor_prazo_entrega,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_prazo_entrega", value
+            ),
+        ),
+        rx.hstack(
+            rx.button("Cadastrar", on_click=State.create_supplier),
+            rx.button("Atualizar", on_click=State.update_supplier),
+            rx.button("Remover", on_click=State.request_delete_supplier),
+        ),
+        rx.cond(
+            State.confirmando_remocao_fornecedor,
+            rx.vstack(
+                rx.text("Confirma a remoção deste fornecedor?"),
+                rx.hstack(
+                    rx.button("Cancelar", on_click=State.cancel_delete_supplier),
+                    rx.button("Confirmar remoção", on_click=State.delete_supplier),
+                ),
+            ),
+            rx.fragment(),
+        ),
+        width="100%",
+        max_width="36rem",
+    )
+
+
+def suppliers_page() -> rx.Component:
+    return protected_layout(
+        rx.cond(
+            State.is_gestor,
+            rx.vstack(
+                rx.heading("Gestão de fornecedores"),
+                supplier_list(),
+                supplier_form(),
+                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+                width="100%",
+            ),
+            rx.text(FORBIDDEN_MESSAGE),
+        )
+    )
+
+
+def supplier_list() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Fornecedores", size="5"),
+        rx.foreach(
+            State.fornecedores,
+            lambda supplier: rx.hstack(
+                rx.text(supplier["nome"], width="14rem"),
+                rx.text(supplier["cnpj"], width="10rem"),
+                rx.text(supplier["telefone"], width="10rem"),
+                rx.text(supplier["email"], width="16rem"),
+                rx.text(supplier["prazo_entrega"], width="10rem"),
+                rx.button(
+                    "Selecionar",
+                    on_click=lambda: State.select_supplier(supplier["id"]),
+                ),
+                width="100%",
+            ),
+        ),
+        width="100%",
+    )
+
+
+def supplier_form() -> rx.Component:
+    return rx.vstack(
+        rx.heading("Manter fornecedor", size="5"),
+        rx.cond(
+            State.fornecedor_id != "",
+            rx.text("Fornecedor selecionado: ", State.fornecedor_id),
+        ),
+        rx.input(
+            placeholder="Nome",
+            value=State.fornecedor_nome,
+            on_change=lambda value: State.set_supplier_field("fornecedor_nome", value),
+        ),
+        rx.input(
+            placeholder="CNPJ",
+            value=State.fornecedor_cnpj,
+            on_change=lambda value: State.set_supplier_field("fornecedor_cnpj", value),
+        ),
+        rx.input(
+            placeholder="Telefone",
+            value=State.fornecedor_telefone,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_telefone", value
+            ),
+        ),
+        rx.input(
+            placeholder="E-mail",
+            type="email",
+            value=State.fornecedor_email,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_email", value
+            ),
+        ),
+        rx.input(
+            placeholder="Endereço",
+            value=State.fornecedor_endereco,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_endereco", value
+            ),
+        ),
+        rx.input(
+            placeholder="Prazo de entrega (opcional)",
+            value=State.fornecedor_prazo_entrega,
+            on_change=lambda value: State.set_supplier_field(
+                "fornecedor_prazo_entrega", value
+            ),
+        ),
+        rx.hstack(
+            rx.button("Cadastrar", on_click=State.create_supplier),
+            rx.button("Atualizar", on_click=State.update_supplier),
+            rx.button("Remover", on_click=State.request_delete_supplier),
+        ),
+        rx.cond(
+            State.confirmando_remocao_fornecedor,
+            rx.vstack(
+                rx.text("Confirma a remoção deste fornecedor?"),
+                rx.hstack(
+                    rx.button("Cancelar", on_click=State.cancel_delete_supplier),
+                    rx.button("Confirmar remoção", on_click=State.delete_supplier),
+                ),
+            ),
+        ),
+        width="100%",
+        max_width="36rem",
+    )
+
+
+def suppliers_page() -> rx.Component:
+    return protected_layout(
+        rx.cond(
+            State.is_gestor,
+            rx.vstack(
+                rx.heading("Gestão de fornecedores"),
+                supplier_list(),
+                supplier_form(),
+                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+                width="100%",
+            ),
+            rx.text(FORBIDDEN_MESSAGE),
+        )
+    )
+
+
 def account_page() -> rx.Component:
     return protected_layout(
         rx.cond(
@@ -1401,12 +1948,30 @@ def product_form() -> rx.Component:
                     "produto_categoria_id", value
                 ),
             ),
-            rx.input(
-                placeholder="ID do fornecedor",
-                value=State.produto_fornecedor_id,
-                on_change=lambda value: State.set_product_field(
-                    "produto_fornecedor_id", value
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder="Selecione um fornecedor",
+                    width="100%",
                 ),
+                rx.select.content(
+                    rx.select.group(
+                        rx.foreach(
+                            State.fornecedores,
+                            lambda supplier: rx.select.item(
+                                supplier["nome"] + " (" + supplier["cnpj"] + ")",
+                                value=supplier["id"],
+                            ),
+                        ),
+                    ),
+                ),
+                value=State.produto_fornecedor_id,
+                on_change=State.set_product_supplier,
+                disabled=State.fornecedores.length() == 0,
+                width="100%",
+            ),
+            rx.cond(
+                State.fornecedores.length() == 0,
+                rx.text("Nenhum fornecedor disponível. Cadastre um fornecedor primeiro."),
             ),
             rx.input(
                 placeholder="Nome",
@@ -1648,6 +2213,7 @@ app.add_page(products_page, route="/produtos", on_load=State.load_products)
 app.add_page(stock_page, route="/estoque", on_load=State.load_products)
 app.add_page(customers_page, route="/clientes", on_load=State.load_customers)
 app.add_page(employees_page, route="/equipe", on_load=State.load_employees)
+app.add_page(suppliers_page, route="/fornecedores", on_load=State.load_suppliers)
 app.add_page(attendance_page, route="/atendimento", on_load=State.load_session)
 app.add_page(sales_page, route="/vendas", on_load=State.load_sales)
 app.add_page(login_page, route="/")
