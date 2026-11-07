@@ -8,8 +8,8 @@ Define o cadastro de produtos e categorias e mantém o estoque disponível para 
 O sistema SHALL permitir que somente o gestor crie, edite e inative produtos e categorias, mantendo os vínculos obrigatórios com categoria e fornecedor e sem permitir que o colaborador execute essas operações.
 
 #### Scenario: Gestor cadastra produto válido
-- **WHEN** um gestor informa nome, categoria, fornecedor, preço, quantidade em estoque, estoque mínimo e indicação de controlado válidos
-- **THEN** o sistema cria o produto ativo com esses dados e o disponibiliza para consulta
+- **WHEN** um gestor informa nome, categoria, preço, quantidade em estoque, estoque mínimo e indicação de controlado válidos, selecionando um fornecedor cadastrado no catálogo
+- **THEN** o sistema valida o fornecedor no backend, cria o produto ativo com os dados informados e o disponibiliza para consulta
 
 #### Scenario: Gestor edita produto
 - **WHEN** um gestor altera os dados de um produto existente

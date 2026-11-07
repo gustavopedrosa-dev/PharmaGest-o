@@ -40,6 +40,8 @@ class SupplierXanoContractTests(unittest.TestCase):
         self.assertIn("$db.fornecedor.id != $input.id", update_script)
         self.assertIn("text? prazo_entrega?", create_script)
         self.assertIn("text? prazo_entrega?", update_script)
+        self.assertIn("text? telefone?", create_script)
+        self.assertIn("text? telefone?", update_script)
         self.assertIn("prazo_entrega: $input.prazo_entrega", create_script)
         self.assertIn("prazo_entrega: $input.prazo_entrega", update_script)
 

@@ -6,7 +6,7 @@ query "produtos/fornecedor/{id}" verb=PATCH {
     int id
     text nome filters=trim
     text cnpj filters=trim
-    text? telefone
+    text? telefone?
     email email
     text endereco filters=trim
     text? prazo_entrega?

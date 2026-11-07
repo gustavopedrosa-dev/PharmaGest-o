@@ -35,6 +35,7 @@ class State(rx.State):
     mensagem: str = ""
     login_input: str = ""
     senha_input: str = ""
+    login_role: str = "colaborador"
     novo_login: str = ""
     senha_atual: str = ""
     nova_senha: str = ""
@@ -116,6 +117,10 @@ class State(rx.State):
     @rx.event
     def set_senha_input(self, value: str) -> None:
         self.senha_input = value
+
+    @rx.event
+    def set_login_role(self, value: str) -> None:
+        self.login_role = value
 
     @rx.event
     def set_novo_login(self, value: str) -> None:
@@ -1235,66 +1240,177 @@ class State(rx.State):
         self.mensagem = SESSION_EXPIRED_MESSAGE
 
 
-def login_page() -> rx.Component:
-    return rx.center(
-        rx.vstack(
-            rx.heading("FarmaGestão", size="8"),
-            rx.text("Entre com seu usuário."),
-            rx.input(
-                placeholder="Login",
-                value=State.login_input,
-                on_change=State.set_login_input,
-            ),
-            rx.input(
-                placeholder="Senha",
-                type="password",
-                value=State.senha_input,
-                on_change=State.set_senha_input,
-            ),
-            rx.button("Entrar", on_click=State.login_user),
-            rx.cond(State.mensagem != "", rx.text(State.mensagem, color="red")),
-            width="100%",
-            max_width="28rem",
-            padding="2rem",
+def login_role_card(label: str, role: str, icon: str) -> rx.Component:
+    return rx.button(
+        rx.text(icon, class_name="role-icon"),
+        rx.text(label),
+        on_click=State.set_login_role(role),
+        class_name=rx.cond(
+            State.login_role == role,
+            "role-card role-card-active",
+            "role-card",
         ),
-        min_height="100vh",
+        type="button",
+    )
+
+
+def feedback_message() -> rx.Component:
+    return rx.cond(
+        State.mensagem != "",
+        rx.box(rx.text(State.mensagem), class_name="feedback feedback-error"),
+        rx.fragment(),
+    )
+
+
+def page_header(title: str, description: str = "") -> rx.Component:
+    return rx.vstack(
+        rx.heading(title, size="7", class_name="page-title"),
+        rx.cond(
+            description != "",
+            rx.text(description, class_name="page-description"),
+            rx.fragment(),
+        ),
+        align_items="start",
+        width="100%",
+        spacing="1",
+    )
+
+
+def content_card(content: rx.Component, class_name: str = "") -> rx.Component:
+    return rx.box(content, class_name=f"content-card {class_name}".strip(), width="100%")
+
+
+def status_badge(label: str, tone: str = "success") -> rx.Component:
+    return rx.text(label, class_name=f"status-badge status-badge-{tone}")
+
+
+def section_heading(title: str, description: str = "") -> rx.Component:
+    return rx.vstack(
+        rx.heading(title, size="5"),
+        rx.cond(
+            description != "",
+            rx.text(description, class_name="muted"),
+            rx.fragment(),
+        ),
+        align_items="start",
+        spacing="1",
+        width="100%",
+    )
+
+
+def login_page() -> rx.Component:
+    return rx.box(
+        rx.box(
+            rx.box(class_name="login-blob login-blob-left"),
+            rx.box(class_name="login-blob login-blob-right"),
+            class_name="login-decoration",
+        ),
+        rx.box(
+            rx.vstack(
+                rx.text("FarmaGestão", class_name="brand-mark"),
+                rx.heading("Gestão simples para sua farmácia", size="8"),
+                rx.text(
+                    "Acesse sua conta para acompanhar a operação.",
+                    class_name="login-subtitle",
+                ),
+                rx.hstack(
+                    login_role_card("Gestor", "gestor", "G"),
+                    login_role_card("Colaborador", "colaborador", "C"),
+                    class_name="role-grid",
+                    width="100%",
+                ),
+                rx.vstack(
+                    rx.text("Login", class_name="field-label"),
+                    rx.input(
+                        placeholder="Digite seu usuário",
+                        value=State.login_input,
+                        on_change=State.set_login_input,
+                    ),
+                    rx.text("Senha", class_name="field-label"),
+                    rx.input(
+                        placeholder="Digite sua senha",
+                        type="password",
+                        value=State.senha_input,
+                        on_change=State.set_senha_input,
+                    ),
+                    rx.button(
+                        "Entrar",
+                        on_click=State.login_user,
+                        class_name="primary-button login-submit",
+                        width="100%",
+                    ),
+                    feedback_message(),
+                    width="100%",
+                    align_items="stretch",
+                    spacing="2",
+                ),
+                width="100%",
+                spacing="4",
+            ),
+            class_name="login-panel",
+        ),
+        class_name="login-page",
     )
 
 
 def navigation() -> rx.Component:
-    return rx.hstack(
-        rx.cond(
-            State.is_gestor,
-            rx.hstack(
-                rx.link("Painel", href="/dashboard"),
-                rx.link("Produtos", href="/produtos"),
-                rx.link("Vendas", href="/vendas"),
-                rx.link("Equipe", href="/equipe"),
-                rx.link("Fornecedores", href="/fornecedores"),
+    return rx.box(
+        rx.hstack(
+            rx.vstack(
+                rx.text(
+                    "Bem-vindo(a), ",
+                    State.nome,
+                    class_name="nav-user-title",
+                ),
+                align_items="start",
+                spacing="0",
             ),
-            rx.hstack(
-                rx.link("Atendimento", href="/atendimento"),
-                rx.link("Minhas vendas", href="/vendas"),
+            justify="between",
+            align_items="center",
+            width="100%",
+        ),
+        rx.hstack(
+            rx.cond(
+                State.is_gestor,
+                rx.hstack(
+                    rx.link("Visão geral", href="/dashboard", class_name="nav-tab nav-tab-active"),
+                    rx.link("Vendas", href="/vendas", class_name="nav-tab"),
+                    rx.link("Estoque", href="/estoque", class_name="nav-tab"),
+                    rx.link("Produtos", href="/produtos", class_name="nav-tab"),
+                    rx.link("Clientes", href="/clientes", class_name="nav-tab"),
+                    rx.link("Equipe", href="/equipe", class_name="nav-tab"),
+                    rx.link("Fornecedores", href="/fornecedores", class_name="nav-tab"),
+                    class_name="nav-tabs",
+                ),
+                rx.hstack(
+                    rx.link("Atendimento", href="/atendimento", class_name="nav-tab nav-tab-active"),
+                    rx.link("Minhas vendas", href="/vendas", class_name="nav-tab"),
+                    rx.link("Estoque", href="/estoque", class_name="nav-tab"),
+                    rx.link("Clientes", href="/clientes", class_name="nav-tab"),
+                    rx.link("Minha conta", href="/minha-conta", class_name="nav-tab"),
+                    class_name="nav-tabs",
+                ),
             ),
+            rx.button("Sair", on_click=State.logout, class_name="logout-button"),
+            width="100%",
+            justify="between",
+            align_items="center",
+            wrap="wrap",
+            class_name="nav-menu",
         ),
-        rx.link("Clientes", href="/clientes"),
-        rx.link("Estoque", href="/estoque"),
-        rx.cond(
-            State.is_gestor,
-            rx.fragment(),
-            rx.link("Minha conta", href="/minha-conta"),
-        ),
-        rx.button("Sair", on_click=State.logout),
-        justify="between",
-        width="100%",
+        class_name="topbar",
     )
 
 
 def protected_layout(content: rx.Component) -> rx.Component:
     return rx.cond(
         State.authenticated,
-        rx.vstack(navigation(), content, width="100%", padding="2rem"),
-        rx.center(rx.text("Carregando..."), min_height="100vh"),
+        rx.box(
+            navigation(),
+            rx.box(content, class_name="page-content"),
+            class_name="app-shell",
+        ),
+        rx.center(rx.text("Carregando...", class_name="muted"), min_height="100vh"),
     )
 
 
@@ -1303,87 +1419,97 @@ def dashboard_page() -> rx.Component:
         rx.cond(
             State.is_gestor,
             rx.vstack(
-            rx.heading("Painel do gestor"),
-            rx.text("Bem-vindo, ", State.nome, "."),
-            rx.cond(
-                State.dashboard_carregado,
-                rx.vstack(
-                    rx.hstack(
-                        rx.box(
-                            rx.vstack(
-                                rx.text("Vendas hoje"),
-                                rx.heading(State.dashboard_total_vendas, size="7"),
-                            ),
-                            padding="1rem",
-                            border="1px solid #ddd",
-                            border_radius="12px",
-                            width="100%",
-                        ),
-                        rx.box(
-                            rx.vstack(
-                                rx.text("Faturamento hoje"),
-                                rx.heading(
-                                    f"R$ {State.dashboard_valor_total:.2f}",
-                                    size="7",
-                                ),
-                            ),
-                            padding="1rem",
-                            border="1px solid #ddd",
-                            border_radius="12px",
-                            width="100%",
-                        ),
-                        rx.box(
-                            rx.vstack(
-                                rx.text("Funcionários ativos"),
-                                rx.heading(
-                                    State.dashboard_funcionarios_ativos,
-                                    size="7",
-                                ),
-                            ),
-                            padding="1rem",
-                            border="1px solid #ddd",
-                            border_radius="12px",
-                            width="100%",
-                        ),
-                        spacing="3",
-                        width="100%",
-                        wrap="wrap",
-                    ),
-                    rx.heading("Produtos em alerta", size="5"),
-                    rx.cond(
-                        State.dashboard_estoque_critico.length() > 0,
-                        rx.vstack(
-                            rx.foreach(
-                                State.dashboard_estoque_critico,
-                                lambda produto: rx.text(
-                                    f"{produto['nome']} — estoque {produto['estoque']} / mínimo {produto['minimo']}"
-                                ),
-                            )
-                        ),
-                        rx.text("Nenhum produto em risco de estoque."),
-                    ),
-                    rx.heading("Mais vendidos", size="5"),
-                    rx.cond(
-                        State.dashboard_mais_vendidos.length() > 0,
-                        rx.vstack(
-                            rx.foreach(
-                                State.dashboard_mais_vendidos,
-                                lambda produto: rx.text(
-                                    f"{produto['nome']} — {produto['quantidade']} unidades"
-                                ),
-                            )
-                        ),
-                        rx.text("Ainda não há vendas confirmadas."),
-                    ),
-                ),
                 rx.cond(
-                    State.mensagem != "",
-                    rx.text(State.mensagem, color="red"),
-                    rx.text("Carregando painel..."),
+                    State.dashboard_carregado,
+                    rx.vstack(
+                        rx.hstack(
+                            rx.box(
+                                rx.vstack(
+                                    rx.text("Faturamento hoje", class_name="muted"),
+                                    rx.text(
+                                        f"R$ {State.dashboard_valor_total:.2f}",
+                                        class_name="stat-card-number",
+                                    ),
+                                ),
+                                class_name="stat-card",
+                            ),
+                            rx.box(
+                                rx.vstack(
+                                    rx.text("Vendas hoje", class_name="muted"),
+                                    rx.text(
+                                        State.dashboard_total_vendas,
+                                        class_name="stat-card-number",
+                                    ),
+                                ),
+                                class_name="stat-card",
+                            ),
+                            rx.box(
+                                rx.vstack(
+                                    rx.text(
+                                        "Produtos abaixo do mínimo",
+                                        class_name="muted",
+                                    ),
+                                    rx.text(
+                                        State.dashboard_estoque_critico.length(),
+                                        class_name="stat-card-number",
+                                    ),
+                                ),
+                                class_name="stat-card",
+                            ),
+                            rx.box(
+                                rx.vstack(
+                                    rx.text("Funcionários ativos", class_name="muted"),
+                                    rx.text(
+                                        State.dashboard_funcionarios_ativos,
+                                        class_name="stat-card-number",
+                                    ),
+                                ),
+                                class_name="stat-card",
+                            ),
+                            width="100%",
+                            wrap="wrap",
+                            spacing="3",
+                            class_name="dashboard-stats",
+                        ),
+                        content_card(
+                            rx.vstack(
+                                rx.heading("Estoque em atenção", size="5"),
+                                rx.box(
+                                    rx.text("Produto", class_name="table-heading"),
+                                    rx.text("Estoque", class_name="table-heading"),
+                                    rx.text("Mínimo", class_name="table-heading"),
+                                    rx.text("Status", class_name="table-heading"),
+                                    class_name="stock-alert-head",
+                                ),
+                                rx.cond(
+                                    State.dashboard_estoque_critico.length() > 0,
+                                    rx.foreach(
+                                        State.dashboard_estoque_critico,
+                                        lambda produto: rx.box(
+                                            rx.text(produto["nome"], class_name="table-cell"),
+                                            rx.text(produto["estoque"], class_name="table-cell"),
+                                            rx.text(produto["minimo"], class_name="table-cell"),
+                                            status_badge("Repor", "danger"),
+                                            class_name="stock-alert-row",
+                                        ),
+                                    ),
+                                    rx.text(
+                                        "Nenhum produto em risco de estoque.",
+                                        class_name="muted",
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    rx.cond(
+                        State.mensagem != "",
+                        feedback_message(),
+                        rx.text("Carregando painel...", class_name="muted"),
+                    ),
                 ),
-            ),
-            spacing="4",
+                spacing="4",
                 width="100%",
+                class_name="dashboard-page",
             ),
             rx.text(FORBIDDEN_MESSAGE, color="red"),
         )
@@ -1400,6 +1526,7 @@ def customer_list() -> rx.Component:
                 rx.text(customer["nome"], width="14rem"),
                 rx.text("CPF: ", customer["cpf"]),
                 rx.text("Situacao: ", customer["situacao"]),
+                class_name="content-card",
                 width="100%",
             ),
         ),
@@ -1450,6 +1577,7 @@ def customer_form() -> rx.Component:
             rx.button("Inativar", on_click=State.deactivate_customer),
         ),
         width="100%",
+        class_name="content-card",
         max_width="32rem",
     )
 
@@ -1526,6 +1654,7 @@ def address_section() -> rx.Component:
                     ),
                 ),
                 rx.button("Cadastrar endereco", on_click=State.create_address),
+                class_name="content-card",
                 width="100%",
                 max_width="32rem",
             ),
@@ -1537,11 +1666,13 @@ def address_section() -> rx.Component:
 def customers_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            rx.heading("Gestao de clientes"),
+            page_header("Clientes", "Consulte e mantenha os cadastros autorizados."),
             customer_list(),
             rx.cond(State.is_gestor, rx.fragment(), customer_form()),
             address_section(),
-            rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+            feedback_message(),
+            width="100%",
+            spacing="4",
         )
     )
 
@@ -1558,6 +1689,7 @@ def employee_list() -> rx.Component:
                 rx.text(employee["salario"], width="10rem"),
                 rx.text(employee["cpf"]),
                 rx.text(employee["situacao"], width="8rem"),
+                class_name="content-card",
                 width="100%",
             ),
         ),
@@ -1661,6 +1793,7 @@ def employee_form() -> rx.Component:
             rx.fragment(),
         ),
         width="100%",
+        class_name="content-card",
         max_width="32rem",
     )
 
@@ -1668,138 +1801,45 @@ def employee_form() -> rx.Component:
 def employees_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            rx.heading("Gestão da equipe"),
+            page_header("Equipe", "Gerencie os funcionários e seus acessos."),
             employee_list(),
             employee_form(),
-            rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+            feedback_message(),
+            width="100%",
+            spacing="4",
         )
     )
 
 
 def supplier_list() -> rx.Component:
     return rx.vstack(
-        rx.heading("Fornecedores", size="5"),
+        section_heading("Fornecedores", "Parceiros cadastrados e prazo de entrega."),
         rx.foreach(
             State.fornecedores,
-            lambda supplier: rx.hstack(
-                rx.text(supplier["nome"], width="14rem"),
-                rx.text(supplier["cnpj"], width="10rem"),
-                rx.text(supplier["telefone"], width="10rem"),
-                rx.text(supplier["email"], width="16rem"),
-                rx.text(supplier["prazo_entrega"], width="10rem"),
+            lambda supplier: rx.box(
+                rx.vstack(
+                    rx.text(supplier["nome"], class_name="table-cell strong"),
+                    rx.text(supplier["cnpj"], class_name="muted"),
+                    align_items="start",
+                    spacing="0",
+                ),
+                rx.text(supplier["telefone"], class_name="table-cell"),
+                rx.text(supplier["email"], class_name="table-cell"),
+                rx.text(
+                    "Prazo ",
+                    supplier["prazo_entrega"],
+                    class_name="status-badge status-badge-info",
+                ),
                 rx.button(
                     "Selecionar",
                     on_click=lambda: State.select_supplier(supplier["id"]),
+                    class_name="secondary-button",
                 ),
+                class_name="supplier-row",
                 width="100%",
             ),
         ),
-        width="100%",
-    )
-
-
-def supplier_form() -> rx.Component:
-    return rx.vstack(
-        rx.heading("Manter fornecedor", size="5"),
-        rx.input(
-            placeholder="ID do fornecedor selecionado",
-            value=State.fornecedor_id,
-            is_read_only=True,
-        ),
-        rx.input(
-            placeholder="Nome",
-            value=State.fornecedor_nome,
-            on_change=lambda value: State.set_supplier_field("fornecedor_nome", value),
-        ),
-        rx.input(
-            placeholder="CNPJ",
-            value=State.fornecedor_cnpj,
-            on_change=lambda value: State.set_supplier_field("fornecedor_cnpj", value),
-        ),
-        rx.input(
-            placeholder="Telefone",
-            value=State.fornecedor_telefone,
-            on_change=lambda value: State.set_supplier_field(
-                "fornecedor_telefone", value
-            ),
-        ),
-        rx.input(
-            placeholder="E-mail",
-            type="email",
-            value=State.fornecedor_email,
-            on_change=lambda value: State.set_supplier_field(
-                "fornecedor_email", value
-            ),
-        ),
-        rx.input(
-            placeholder="Endereço",
-            value=State.fornecedor_endereco,
-            on_change=lambda value: State.set_supplier_field(
-                "fornecedor_endereco", value
-            ),
-        ),
-        rx.input(
-            placeholder="Prazo de entrega (opcional)",
-            value=State.fornecedor_prazo_entrega,
-            on_change=lambda value: State.set_supplier_field(
-                "fornecedor_prazo_entrega", value
-            ),
-        ),
-        rx.hstack(
-            rx.button("Cadastrar", on_click=State.create_supplier),
-            rx.button("Atualizar", on_click=State.update_supplier),
-            rx.button("Remover", on_click=State.request_delete_supplier),
-        ),
-        rx.cond(
-            State.confirmando_remocao_fornecedor,
-            rx.vstack(
-                rx.text("Confirma a remoção deste fornecedor?"),
-                rx.hstack(
-                    rx.button("Cancelar", on_click=State.cancel_delete_supplier),
-                    rx.button("Confirmar remoção", on_click=State.delete_supplier),
-                ),
-            ),
-            rx.fragment(),
-        ),
-        width="100%",
-        max_width="36rem",
-    )
-
-
-def suppliers_page() -> rx.Component:
-    return protected_layout(
-        rx.cond(
-            State.is_gestor,
-            rx.vstack(
-                rx.heading("Gestão de fornecedores"),
-                supplier_list(),
-                supplier_form(),
-                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
-                width="100%",
-            ),
-            rx.text(FORBIDDEN_MESSAGE),
-        )
-    )
-
-
-def supplier_list() -> rx.Component:
-    return rx.vstack(
-        rx.heading("Fornecedores", size="5"),
-        rx.foreach(
-            State.fornecedores,
-            lambda supplier: rx.hstack(
-                rx.text(supplier["nome"], width="14rem"),
-                rx.text(supplier["cnpj"], width="10rem"),
-                rx.text(supplier["telefone"], width="10rem"),
-                rx.text(supplier["email"], width="16rem"),
-                rx.text(supplier["prazo_entrega"], width="10rem"),
-                rx.button(
-                    "Selecionar",
-                    on_click=lambda: State.select_supplier(supplier["id"]),
-                ),
-                width="100%",
-            ),
-        ),
+        class_name="content-card",
         width="100%",
     )
 
@@ -1860,12 +1900,22 @@ def supplier_form() -> rx.Component:
             rx.vstack(
                 rx.text("Confirma a remoção deste fornecedor?"),
                 rx.hstack(
-                    rx.button("Cancelar", on_click=State.cancel_delete_supplier),
-                    rx.button("Confirmar remoção", on_click=State.delete_supplier),
+                    rx.button(
+                        "Cancelar",
+                        on_click=State.cancel_delete_supplier,
+                        class_name="secondary-button",
+                    ),
+                    rx.button(
+                        "Confirmar remoção",
+                        on_click=State.delete_supplier,
+                        class_name="danger-button",
+                    ),
                 ),
+                class_name="confirm-modal",
             ),
         ),
         width="100%",
+        class_name="content-card",
         max_width="36rem",
     )
 
@@ -1875,11 +1925,15 @@ def suppliers_page() -> rx.Component:
         rx.cond(
             State.is_gestor,
             rx.vstack(
-                rx.heading("Gestão de fornecedores"),
+                page_header(
+                    "Fornecedores",
+                    "Mantenha o catálogo de parceiros da farmácia.",
+                ),
                 supplier_list(),
                 supplier_form(),
-                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+                feedback_message(),
                 width="100%",
+                spacing="4",
             ),
             rx.text(FORBIDDEN_MESSAGE),
         )
@@ -1892,7 +1946,7 @@ def account_page() -> rx.Component:
             State.is_gestor,
             rx.text(FORBIDDEN_MESSAGE),
             rx.vstack(
-                rx.heading("Minha conta"),
+                page_header("Minha conta", "Atualize suas credenciais de acesso."),
                 rx.text("Usuário: ", State.login),
                 rx.input(
                     placeholder="Novo login",
@@ -1913,7 +1967,9 @@ def account_page() -> rx.Component:
                     on_change=State.set_nova_senha,
                 ),
                 rx.button("Salvar senha", on_click=State.update_password),
-                rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+                feedback_message(),
+                class_name="content-card",
+                width="100%",
             ),
         ),
     )
@@ -1931,6 +1987,7 @@ def product_list() -> rx.Component:
                 rx.text("Mínimo: ", product["minimo"]),
                 rx.text(product["situacao"]),
                 rx.text(product["preco"]),
+                class_name="content-card",
                 width="100%",
             ),
         ),
@@ -2020,6 +2077,7 @@ def product_form() -> rx.Component:
             ),
             rx.button("Cadastrar", on_click=State.create_product),
             width="100%",
+            class_name="content-card",
             max_width="32rem",
     )
 
@@ -2027,7 +2085,7 @@ def product_form() -> rx.Component:
 def products_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            rx.heading("Gestão de produtos"),
+            page_header("Produtos", "Cadastre produtos e acompanhe o catálogo ativo."),
             rx.cond(State.is_gestor, product_form(), rx.text(FORBIDDEN_MESSAGE)),
             rx.input(
                 placeholder="ID do produto para inativar",
@@ -2075,7 +2133,9 @@ def products_page() -> rx.Component:
                 ),
             ),
             product_list(),
-            rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+            feedback_message(),
+            width="100%",
+            spacing="4",
         )
     )
 
@@ -2083,16 +2143,18 @@ def products_page() -> rx.Component:
 def stock_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            rx.heading("Consulta de estoque"),
+            page_header("Estoque", "Consulte disponibilidade e alertas de reposição."),
             product_list(),
-            rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+            feedback_message(),
+            width="100%",
+            spacing="4",
         )
     )
 
 
 def sale_form() -> rx.Component:
     return rx.vstack(
-        rx.heading("Registrar atendimento"),
+        page_header("Novo atendimento", "Registre uma venda e acompanhe o estoque em tempo real."),
         rx.input(
             placeholder="ID do produto",
             value=State.venda_produto_id,
@@ -2135,25 +2197,41 @@ def sale_form() -> rx.Component:
         ),
         rx.button("Confirmar venda", on_click=State.create_sale),
         width="100%",
+        class_name="content-card",
         max_width="32rem",
     )
 
 
 def sales_history() -> rx.Component:
     return rx.vstack(
-        rx.heading("Histórico de vendas"),
+        page_header("Vendas", "Consulte pedidos registrados e seus respectivos atendimentos."),
+        rx.box(
+            rx.text("Venda", class_name="table-heading"),
+            rx.text("Pedido", class_name="table-heading"),
+            rx.text("Cliente / atendente", class_name="table-heading"),
+            rx.text("Canal", class_name="table-heading"),
+            rx.text("Total", class_name="table-heading"),
+            class_name="sales-table-head",
+        ),
         rx.foreach(
             State.vendas,
-            lambda sale: rx.hstack(
-                rx.text("Venda ", sale["id"]),
-                rx.text("Pedido ", sale["pedido"]),
-                rx.text("Total: R$ ", sale["total"]),
-                rx.text("Canal: ", sale["canal"]),
-                rx.text("Atendente: ", sale["atendente"]),
-                rx.text("Pagamento: ", sale["pagamento"]),
-                rx.text(sale["status"]),
-                rx.text(sale["data"]),
-                width="100%",
+            lambda sale: rx.box(
+                rx.text(sale["id"], class_name="table-cell strong"),
+                rx.text(sale["pedido"], class_name="table-cell"),
+                rx.vstack(
+                    rx.text(sale["atendente"], class_name="table-cell strong"),
+                    rx.text(sale["data"], class_name="muted"),
+                    align_items="start",
+                    spacing="0",
+                ),
+                status_badge(sale["canal"], "info"),
+                rx.vstack(
+                    rx.text("R$ ", sale["total"], class_name="table-cell strong"),
+                    status_badge(sale["status"], "success"),
+                    align_items="end",
+                    spacing="1",
+                ),
+                class_name="sales-table-row",
             ),
         ),
         rx.heading("Pedidos e itens", size="5"),
@@ -2186,7 +2264,8 @@ def sales_history() -> rx.Component:
                 width="100%",
             ),
         ),
-        rx.cond(State.mensagem != "", rx.text(State.mensagem)),
+        feedback_message(),
+        class_name="content-card",
         width="100%",
     )
 
@@ -2196,16 +2275,365 @@ def attendance_page() -> rx.Component:
         rx.cond(
             State.is_gestor,
             rx.text(FORBIDDEN_MESSAGE),
-            sale_form(),
+            rx.vstack(
+                sale_form(),
+                width="100%",
+                spacing="4",
+            ),
         )
     )
 
 
 def sales_page() -> rx.Component:
-    return protected_layout(sales_history())
+    return protected_layout(
+        rx.vstack(
+            sales_history(),
+            width="100%",
+            spacing="4",
+        )
+    )
 
 
-app = rx.App()
+GLOBAL_STYLE = {
+    "body": {
+        "margin": "0",
+        "background": "linear-gradient(160deg, #eef6f1, #d8ece1)",
+        "color": "#0f2a20",
+        "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "min_height": "100vh",
+    },
+    "a": {
+        "color": "#0f6e56",
+        "text_decoration": "none",
+        "font_size": "0.875rem",
+        "font_weight": "600",
+    },
+    "button": {
+        "font_family": "inherit",
+        "cursor": "pointer",
+        "transition": "transform 0.15s ease, opacity 0.15s ease",
+        "background": "#0f6e56",
+        "color": "#ffffff",
+        "border": "1px solid #0f6e56",
+        "border_radius": "10px",
+        "font_weight": "700",
+    },
+    "input, textarea, select": {
+        "border": "1px solid #d6e6dc",
+        "border_radius": "10px",
+        "background": "#f8fcf9",
+        "color": "#0f2a20",
+    },
+    ".login-page": {
+        "min_height": "100vh",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1.25rem",
+        "position": "relative",
+        "overflow": "hidden",
+    },
+    ".login-decoration": {
+        "position": "fixed",
+        "inset": "0",
+        "overflow": "hidden",
+        "pointer_events": "none",
+    },
+    ".login-blob": {
+        "position": "absolute",
+        "border_radius": "999px",
+        "filter": "blur(60px)",
+        "opacity": "0.55",
+    },
+    ".login-blob-left": {
+        "width": "26rem",
+        "height": "26rem",
+        "left": "-9rem",
+        "bottom": "-8rem",
+        "background": "radial-gradient(circle, #6fbe95, #2f8f6b 70%)",
+    },
+    ".login-blob-right": {
+        "width": "16rem",
+        "height": "16rem",
+        "right": "-5rem",
+        "top": "-4rem",
+        "background": "radial-gradient(circle, #b8e6c9, #7fcba0 70%)",
+    },
+    ".login-panel": {
+        "width": "100%",
+        "max_width": "34rem",
+        "padding": "3rem",
+        "border": "1px solid rgba(255,255,255,0.7)",
+        "border_radius": "26px",
+        "background": "rgba(255,255,255,0.72)",
+        "box_shadow": "0 10px 30px -12px rgba(15,60,45,0.25)",
+        "backdrop_filter": "blur(18px)",
+        "position": "relative",
+        "z_index": "1",
+    },
+    ".brand-mark, .nav-brand": {
+        "color": "#0a4e3d",
+        "font_weight": "800",
+        "letter_spacing": "-0.03em",
+    },
+    ".brand-mark": {"font_size": "1.1rem"},
+    ".login-subtitle, .page-description, .muted": {
+        "color": "#5c7568",
+        "font_size": "0.9rem",
+    },
+    ".role-grid": {"gap": "1rem"},
+    ".role-card": {
+        "flex": "1",
+        "min_width": "0",
+        "min_height": "7rem",
+        "padding": "1.5rem 1.25rem",
+        "border": "1px solid #d6e6dc",
+        "border_radius": "16px",
+        "background": "#ffffff",
+        "color": "#0f6e56",
+        "border_color": "#d6e6dc",
+        "display": "flex",
+        "flex_direction": "column",
+        "align_items": "center",
+        "justify_content": "center",
+        "gap": "0.5rem",
+        "white_space": "nowrap",
+    },
+    ".role-card-active": {
+        "border": "2px solid #0f6e56",
+        "background": "#e1f5ee",
+    },
+    ".role-icon": {
+        "width": "3rem",
+        "height": "3rem",
+        "border_radius": "999px",
+        "background": "#e1f5ee",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "font_weight": "800",
+    },
+    ".field-label": {
+        "color": "#5c7568",
+        "font_size": "0.8rem",
+        "font_weight": "600",
+    },
+    ".primary-button": {
+        "background": "#0f6e56",
+        "color": "#ffffff",
+        "border_radius": "10px",
+        "font_weight": "700",
+        "padding": "0.7rem 1rem",
+    },
+    ".login-submit": {
+        "margin_top": "0.75rem",
+    },
+    ".feedback": {
+        "padding": "0.75rem 1rem",
+        "border_radius": "10px",
+        "font_size": "0.85rem",
+    },
+    ".feedback-error": {
+        "background": "#fcebea",
+        "color": "#a32d2d",
+        "border": "1px solid #f2b8b5",
+    },
+    ".app-shell": {
+        "width": "100%",
+        "min_height": "100vh",
+    },
+    ".topbar": {
+        "padding": "1rem clamp(1rem, 4vw, 3rem)",
+        "background": "rgba(255,255,255,0.72)",
+        "border_bottom": "1px solid #d6e6dc",
+        "backdrop_filter": "blur(12px)",
+        "overflow_x": "hidden",
+        "gap": "0.25rem",
+    },
+    ".nav-links": {"gap": "0.8rem", "align_items": "center"},
+    ".nav-tabs": {"gap": "0.35rem", "align_items": "center", "wrap": "wrap"},
+    ".nav-menu": {"margin_top": "0.5rem"},
+    ".nav-tab": {
+        "padding": "0.45rem 0.75rem",
+        "border": "1px solid transparent",
+        "border_radius": "999px",
+        "font_size": "0.8rem",
+        "font_weight": "600",
+        "white_space": "nowrap",
+    },
+    ".nav-tab-active": {
+        "background": "#e1f5ee",
+        "border_color": "#0f6e56",
+        "color": "#0a4e3d",
+    },
+    ".nav-context": {
+        "color": "#5c7568",
+        "font_size": "0.68rem",
+        "text_transform": "uppercase",
+        "letter_spacing": "0.08em",
+    },
+    ".nav-user-title": {
+        "color": "#0f2a20",
+        "font_size": "0.95rem",
+        "font_weight": "800",
+        "width": "auto",
+        "text_align": "center",
+    },
+    ".nav-user": {"color": "#5c7568", "font_size": "0.8rem"},
+    ".logout-button": {
+        "background": "#0f6e56",
+        "color": "#ffffff",
+        "border": "1px solid #0f6e56",
+        "border_radius": "10px",
+        "padding": "0.5rem 1rem",
+        "font_weight": "700",
+    },
+    ".page-content": {
+        "width": "100%",
+        "max_width": "1400px",
+        "margin": "0 auto",
+        "padding": "clamp(1rem, 4vw, 2rem)",
+    },
+    ".page-title": {"color": "#0a4e3d", "margin_bottom": "0.15rem"},
+    ".dashboard-page": {
+        "padding_top": "1rem",
+    },
+    ".content-card": {
+        "padding": "1.25rem",
+        "border": "1px solid #d6e6dc",
+        "border_radius": "18px",
+        "background": "#ffffff",
+        "box_shadow": "0 10px 30px -12px rgba(15,60,45,0.18)",
+        "overflow_x": "auto",
+    },
+    ".table-heading": {
+        "color": "#5c7568",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+        "text_transform": "uppercase",
+        "letter_spacing": "0.04em",
+    },
+    ".sales-table-head, .sales-table-row": {
+        "display": "grid",
+        "grid_template_columns": "0.7fr 1fr 1.5fr 0.9fr 1fr",
+        "gap": "0.8rem",
+        "align_items": "center",
+        "min_width": "38rem",
+    },
+    ".sales-table-head": {
+        "padding": "0.75rem 0",
+        "border_bottom": "1px solid #d6e6dc",
+    },
+    ".sales-table-row": {
+        "padding": "0.85rem 0",
+        "border_bottom": "1px solid #edf3ef",
+    },
+    ".table-cell": {
+        "font_size": "0.84rem",
+        "color": "#0f2a20",
+        "text_align": "center",
+    },
+    ".strong": {"font_weight": "700", "color": "#0a4e3d"},
+    ".status-badge": {
+        "display": "inline-block",
+        "padding": "0.2rem 0.65rem",
+        "border_radius": "999px",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+        "white_space": "nowrap",
+    },
+    ".status-badge-success": {"background": "#d9f3e8", "color": "#0a6b4d"},
+    ".status-badge-info": {"background": "#e4f0f8", "color": "#28607f"},
+    ".status-badge-warning": {"background": "#fff0d6", "color": "#8a5a12"},
+    ".status-badge-danger": {"background": "#fcebea", "color": "#a32d2d"},
+    ".supplier-row": {
+        "display": "grid",
+        "grid_template_columns": "1.3fr 1fr 1.4fr auto auto",
+        "gap": "0.8rem",
+        "align_items": "center",
+        "padding": "0.8rem 0",
+        "border_bottom": "1px solid #edf3ef",
+        "min_width": "42rem",
+    },
+    ".secondary-button": {
+        "background": "transparent",
+        "color": "#0f6e56",
+        "border": "1px solid #0f6e56",
+    },
+    ".danger-button": {
+        "background": "#a32d2d",
+        "color": "#ffffff",
+        "border_color": "#a32d2d",
+    },
+    ".confirm-modal": {
+        "margin_top": "1rem",
+        "padding": "1rem",
+        "border": "1px solid #f2b8b5",
+        "border_radius": "14px",
+        "background": "#fff7f6",
+    },
+    ".stat-card": {
+        "width": "100%",
+        "min_width": "0",
+        "height": "7rem",
+        "padding": "1rem",
+        "border": "1px solid #d6e6dc",
+        "border_radius": "14px",
+        "background": "#ffffff",
+        "box_sizing": "border-box",
+        "display": "flex",
+        "align_items": "center",
+        "overflow": "hidden",
+    },
+    ".dashboard-stats": {
+        "display": "grid",
+        "grid_template_columns": "repeat(4, minmax(0, 1fr))",
+        "gap": "0.9rem",
+        "margin_bottom": "1.25rem",
+    },
+    ".stat-card-number": {
+        "color": "#0a4e3d",
+        "font_size": "1.65rem",
+        "font_weight": "800",
+    },
+    ".stat-caption": {
+        "color": "#5c7568",
+        "font_size": "0.75rem",
+    },
+    ".stock-alert-head, .stock-alert-row": {
+        "display": "grid",
+        "grid_template_columns": "2fr 1fr 1fr 1fr",
+        "gap": "1rem",
+        "align_items": "center",
+        "min_width": "34rem",
+        "text_align": "center",
+    },
+    ".stock-alert-head": {
+        "padding": "0.9rem 0.5rem 0.65rem",
+        "border_bottom": "1px solid #d6e6dc",
+    },
+    ".stock-alert-row": {
+        "padding": "0.75rem 0.5rem",
+        "border_bottom": "1px solid #edf3ef",
+    },
+    ".stock-alert-head > :first-child, .stock-alert-row > :first-child": {
+        "text_align": "left",
+    },
+    "@media (max-width: 700px)": {
+        ".login-panel": {"padding": "2rem 1.5rem"},
+        ".nav-links": {"gap": "0.6rem"},
+        ".nav-brand": {"width": "100%"},
+        ".nav-tabs": {"width": "100%", "overflow_x": "auto", "padding_bottom": "0.2rem"},
+        ".page-content": {"padding": "1rem 0.75rem"},
+        ".content-card": {"padding": "1rem", "max_width": "100%"},
+        ".dashboard-stats": {"grid_template_columns": "repeat(2, minmax(0, 1fr))"},
+    },
+    "@media (max-width: 480px)": {
+        ".dashboard-stats": {"grid_template_columns": "1fr"},
+    },
+}
+
+app = rx.App(style=GLOBAL_STYLE)
 app.add_page(login_page, route="/login")
 app.add_page(dashboard_page, route="/dashboard", on_load=State.load_dashboard)
 app.add_page(account_page, route="/minha-conta", on_load=State.load_session)

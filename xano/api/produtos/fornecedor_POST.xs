@@ -5,7 +5,7 @@ query "produtos/fornecedor" verb=POST {
   input {
     text nome filters=trim
     text cnpj filters=trim
-    text? telefone
+    text? telefone?
     email email
     text endereco filters=trim
     text? prazo_entrega?

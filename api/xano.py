@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -14,6 +15,22 @@ AUTH_INVALID_MESSAGE = "usuÃ¡rio ou senha invÃ¡lidos"
 SESSION_EXPIRED_MESSAGE = "SessÃ£o expirada. Entre novamente."
 FORBIDDEN_MESSAGE = "VocÃª nÃ£o tem permissÃ£o para esta aÃ§Ã£o"
 UNAVAILABLE_MESSAGE = "ServiÃ§o indisponÃ­vel, tente novamente"
+
+
+def _load_local_env() -> None:
+    """Load non-exported local settings when Reflex starts from the project root."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+
+
+_load_local_env()
 
 
 class XanoError(Exception):
