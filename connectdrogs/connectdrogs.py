@@ -35,6 +35,7 @@ class State(rx.State):
     mensagem: str = ""
     login_input: str = ""
     senha_input: str = ""
+    senha_visivel: bool = False
     login_role: str = "colaborador"
     novo_login: str = ""
     senha_atual: str = ""
@@ -117,6 +118,9 @@ class State(rx.State):
     @rx.event
     def set_senha_input(self, value: str) -> None:
         self.senha_input = value
+
+    def alternar_senha(self) -> None:
+        self.senha_visivel = not self.senha_visivel
 
     @rx.event
     def set_login_role(self, value: str) -> None:
@@ -206,6 +210,7 @@ class State(rx.State):
         self._token = token
         self._set_session(session)
         self.senha_input = ""
+        self.senha_visivel = False
         return rx.redirect("/dashboard")
 
     @rx.event
@@ -683,6 +688,11 @@ class State(rx.State):
             )
             orders, items = client.list_orders(self._token, is_gestor=self.is_gestor)
             orders_by_id = {order.id: order for order in orders}
+            items_by_order: dict[int, list[str]] = {}
+            for item in items:
+                items_by_order.setdefault(int(item["id_pedido"]), []).append(
+                    f'{item["quantidade"]}x Produto {item["id_produto"]}'
+                )
             payments_by_sale = {
                 int(payment["id_venda"]): str(payment.get("forma_pagamento") or "")
                 for payment in payments
@@ -694,6 +704,16 @@ class State(rx.State):
                     "total": f"{sale.valor_total:.2f}",
                     "status": sale.status,
                     "data": sale.data_venda,
+                    "cliente": str(
+                        orders_by_id.get(sale.id_pedido).id_cliente
+                        or "balcão"
+                    )
+                    if sale.id_pedido in orders_by_id
+                    else "balcão",
+                    "produtos": ", ".join(
+                        items_by_order.get(sale.id_pedido, [])
+                    )
+                    or "—",
                     "canal": orders_by_id.get(sale.id_pedido).canal
                     if sale.id_pedido in orders_by_id
                     else "",
@@ -1100,6 +1120,16 @@ class State(rx.State):
             {"id": str(category.id), "nome": category.nome}
             for category in categories
         ]
+        category_names = {item["id"]: item["nome"] for item in self.categorias}
+        self.produtos = [
+            {
+                **product,
+                "categoria": category_names.get(
+                    product["categoria"], product["categoria"]
+                ),
+            }
+            for product in self.produtos
+        ]
 
     def _set_customers(self, customers: list[Customer]) -> None:
         self.clientes = [self._customer_view(customer) for customer in customers]
@@ -1172,6 +1202,7 @@ class State(rx.State):
         return {
             "id": str(product.id),
             "nome": product.nome,
+            "categoria": str(product.id_categoria),
             "estoque": str(product.quantidade_estoque),
             "minimo": str(product.estoque_minimo),
             "preco": f"R$ {product.preco_venda:.2f}",
@@ -1242,8 +1273,11 @@ class State(rx.State):
 
 def login_role_card(label: str, role: str, icon: str) -> rx.Component:
     return rx.button(
-        rx.text(icon, class_name="role-icon"),
-        rx.text(label),
+        rx.box(
+            rx.icon(tag=icon, size=18),
+            class_name="role-icon",
+        ),
+        rx.text(label, class_name="role-label"),
         on_click=State.set_login_role(role),
         class_name=rx.cond(
             State.login_role == role,
@@ -1284,6 +1318,39 @@ def status_badge(label: str, tone: str = "success") -> rx.Component:
     return rx.text(label, class_name=f"status-badge status-badge-{tone}")
 
 
+def channel_badge(channel: rx.Var) -> rx.Component:
+    return rx.text(
+        channel,
+        class_name=rx.cond(
+            channel == "online",
+            "status-badge channel-badge channel-badge-online",
+            "status-badge channel-badge channel-badge-presencial",
+        ),
+    )
+
+
+def navigation_tab(label: str, href: str) -> rx.Component:
+    return rx.link(
+        label,
+        href=href,
+        class_name=rx.cond(
+            State.router.page.path == href,
+            "nav-tab nav-tab-active",
+            "nav-tab",
+        ),
+    )
+
+
+def feature_pill(label: str, tone: str) -> rx.Component:
+    return rx.hstack(
+        rx.box(class_name=f"feature-pill-dot feature-pill-dot-{tone}"),
+        rx.text(label),
+        class_name=f"feature-pill feature-pill-{tone}",
+        align_items="center",
+        spacing="2",
+    )
+
+
 def section_heading(title: str, description: str = "") -> rx.Component:
     return rx.vstack(
         rx.heading(title, size="5"),
@@ -1306,33 +1373,91 @@ def login_page() -> rx.Component:
             class_name="login-decoration",
         ),
         rx.box(
-            rx.vstack(
-                rx.text("FarmaGestão", class_name="brand-mark"),
-                rx.heading("Gestão simples para sua farmácia", size="8"),
+            rx.hstack(
+                rx.box(
+                    rx.box(
+                        rx.box(class_name="login-logo-plus-horizontal"),
+                        rx.box(class_name="login-logo-plus-vertical"),
+                        class_name="login-logo-plus",
+                    ),
+                    rx.hstack(
+                        rx.box(class_name="login-logo-bar login-logo-bar-short"),
+                        rx.box(class_name="login-logo-bar login-logo-bar-medium"),
+                        rx.box(class_name="login-logo-bar login-logo-bar-tall"),
+                        class_name="login-logo-bars",
+                        align_items="end",
+                        spacing="1",
+                    ),
+                    class_name="login-logo-mark",
+                ),
                 rx.text(
-                    "Acesse sua conta para acompanhar a operação.",
+                    "Farma",
+                    rx.text("Gestão", as_="span", class_name="login-brand-accent"),
+                    class_name="login-brand-neon",
+                ),
+                align_items="center",
+                spacing="2",
+                class_name="login-brand",
+            ),
+            rx.heading(
+                "Sua farmácia sob ",
+                rx.text("controle total.", as_="span", class_name="neon-gradient-text"),
+                size="9",
+                class_name="login-hero-title",
+            ),
+            rx.text(
+                "Vendas, estoque, receitas e equipe em um só lugar, com a clareza que o balcão precisa.",
+                class_name="login-hero-description",
+            ),
+            rx.hstack(
+                feature_pill("Estoque", "green"),
+                feature_pill("Vendas", "cyan"),
+                feature_pill("Receitas controladas", "purple"),
+                feature_pill("Fornecedores", "yellow"),
+                feature_pill("Equipe", "blue"),
+                class_name="login-feature-pills",
+                wrap="wrap",
+            ),
+            class_name="login-hero-copy",
+        ),
+        rx.box(
+            rx.vstack(
+                rx.heading("Entrar", size="8", class_name="login-title"),
+                rx.text(
+                    "Você é um...",
                     class_name="login-subtitle",
                 ),
                 rx.hstack(
-                    login_role_card("Gestor", "gestor", "G"),
-                    login_role_card("Colaborador", "colaborador", "C"),
+                    login_role_card("Colaborador", "colaborador", "user-round"),
+                    login_role_card("Gestor", "gestor", "shield-check"),
                     class_name="role-grid",
                     width="100%",
                 ),
                 rx.vstack(
                     rx.text("Login", class_name="field-label"),
                     rx.input(
-                        placeholder="Digite seu usuário",
+                        placeholder="nome",
                         value=State.login_input,
                         on_change=State.set_login_input,
                     ),
                     rx.text("Senha", class_name="field-label"),
-                    rx.input(
-                        placeholder="Digite sua senha",
-                        type="password",
-                        value=State.senha_input,
-                        on_change=State.set_senha_input,
+                    rx.box(
+                        rx.input(
+                            placeholder="Sua senha",
+                            type=rx.cond(State.senha_visivel, "text", "password"),
+                            value=State.senha_input,
+                            on_change=State.set_senha_input,
+                            class_name="password-input",
+                        ),
+                        rx.button(
+                            rx.cond(State.senha_visivel, "Ocultar", "Mostrar"),
+                            on_click=State.alternar_senha,
+                            class_name="show-password",
+                            type="button",
+                        ),
+                        class_name="password-field",
                     ),
+                    rx.text("Esqueci minha senha", class_name="forgot-password"),
                     rx.button(
                         "Entrar",
                         on_click=State.login_user,
@@ -1344,8 +1469,9 @@ def login_page() -> rx.Component:
                     align_items="stretch",
                     spacing="2",
                 ),
+                rx.box(class_name="login-panel-line"),
                 width="100%",
-                spacing="4",
+                spacing="3",
             ),
             class_name="login-panel",
         ),
@@ -1373,21 +1499,21 @@ def navigation() -> rx.Component:
             rx.cond(
                 State.is_gestor,
                 rx.hstack(
-                    rx.link("Visão geral", href="/dashboard", class_name="nav-tab nav-tab-active"),
-                    rx.link("Vendas", href="/vendas", class_name="nav-tab"),
-                    rx.link("Estoque", href="/estoque", class_name="nav-tab"),
-                    rx.link("Produtos", href="/produtos", class_name="nav-tab"),
-                    rx.link("Clientes", href="/clientes", class_name="nav-tab"),
-                    rx.link("Equipe", href="/equipe", class_name="nav-tab"),
-                    rx.link("Fornecedores", href="/fornecedores", class_name="nav-tab"),
+                    navigation_tab("Visão geral", "/dashboard"),
+                    navigation_tab("Vendas", "/vendas"),
+                    navigation_tab("Estoque", "/estoque"),
+                    navigation_tab("Produtos", "/produtos"),
+                    navigation_tab("Clientes", "/clientes"),
+                    navigation_tab("Equipe", "/equipe"),
+                    navigation_tab("Fornecedores", "/fornecedores"),
                     class_name="nav-tabs",
                 ),
                 rx.hstack(
-                    rx.link("Atendimento", href="/atendimento", class_name="nav-tab nav-tab-active"),
-                    rx.link("Minhas vendas", href="/vendas", class_name="nav-tab"),
-                    rx.link("Estoque", href="/estoque", class_name="nav-tab"),
-                    rx.link("Clientes", href="/clientes", class_name="nav-tab"),
-                    rx.link("Minha conta", href="/minha-conta", class_name="nav-tab"),
+                    navigation_tab("Atendimento", "/atendimento"),
+                    navigation_tab("Minhas vendas", "/vendas"),
+                    navigation_tab("Estoque", "/estoque"),
+                    navigation_tab("Clientes", "/clientes"),
+                    navigation_tab("Minha conta", "/minha-conta"),
                     class_name="nav-tabs",
                 ),
             ),
@@ -1518,19 +1644,65 @@ def dashboard_page() -> rx.Component:
 
 def customer_list() -> rx.Component:
     return rx.vstack(
-        rx.heading("Clientes", size="5"),
+        rx.hstack(
+            rx.heading("Clientes", size="7", class_name="customers-page-title"),
+            rx.link(
+                "Novo cliente",
+                href="#cliente-form",
+                class_name="new-customer-button",
+            ),
+            justify="between",
+            align_items="center",
+            width="100%",
+        ),
+        rx.box(
+            rx.text("Nome", class_name="customer-table-heading"),
+            rx.text("CPF", class_name="customer-table-heading"),
+            rx.text("Telefone", class_name="customer-table-heading"),
+            rx.text("E-mail", class_name="customer-table-heading"),
+            rx.text("Endereço", class_name="customer-table-heading"),
+            rx.text("", class_name="customer-table-heading"),
+            class_name="customer-table-head",
+        ),
         rx.foreach(
             State.clientes,
-            lambda customer: rx.hstack(
-                rx.text(customer["id"], width="3rem"),
-                rx.text(customer["nome"], width="14rem"),
-                rx.text("CPF: ", customer["cpf"]),
-                rx.text("Situacao: ", customer["situacao"]),
-                class_name="content-card",
-                width="100%",
+            lambda customer: rx.box(
+                rx.text(customer["nome"], class_name="customer-table-cell customer-name"),
+                rx.text(
+                    rx.cond(customer["cpf"] != "", customer["cpf"], "—"),
+                    class_name="customer-table-cell",
+                ),
+                rx.text(
+                    rx.cond(customer["telefone"] != "", customer["telefone"], "—"),
+                    class_name="customer-table-cell",
+                ),
+                rx.text(
+                    rx.cond(customer["email"] != "", customer["email"], "—"),
+                    class_name="customer-table-cell",
+                ),
+                rx.text("—", class_name="customer-table-cell"),
+                rx.hstack(
+                    rx.button(
+                        "Editar",
+                        on_click=State.set_customer_field(
+                            "cliente_id", customer["id"]
+                        ),
+                        class_name="customer-edit-button",
+                    ),
+                    rx.button(
+                        "Remover",
+                        on_click=State.set_customer_field(
+                            "cliente_id", customer["id"]
+                        ),
+                        class_name="customer-remove-button",
+                    ),
+                    spacing="2",
+                ),
+                class_name="customer-table-row",
             ),
         ),
         width="100%",
+        class_name="content-card customers-card",
     )
 
 
@@ -1576,6 +1748,7 @@ def customer_form() -> rx.Component:
             rx.button("Atualizar", on_click=State.update_customer),
             rx.button("Inativar", on_click=State.deactivate_customer),
         ),
+        id="cliente-form",
         width="100%",
         class_name="content-card",
         max_width="32rem",
@@ -1669,7 +1842,6 @@ def customers_page() -> rx.Component:
             page_header("Clientes", "Consulte e mantenha os cadastros autorizados."),
             customer_list(),
             rx.cond(State.is_gestor, rx.fragment(), customer_form()),
-            address_section(),
             feedback_message(),
             width="100%",
             spacing="4",
@@ -2143,11 +2315,43 @@ def products_page() -> rx.Component:
 def stock_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
-            page_header("Estoque", "Consulte disponibilidade e alertas de reposição."),
-            product_list(),
+            rx.box(
+                rx.text("Produto", class_name="stock-table-heading"),
+                rx.text("Categoria", class_name="stock-table-heading"),
+                rx.text("Estoque", class_name="stock-table-heading"),
+                rx.text("Mínimo", class_name="stock-table-heading"),
+                rx.text("Status", class_name="stock-table-heading"),
+                class_name="stock-table-head",
+            ),
+            rx.foreach(
+                State.produtos,
+                lambda product: rx.box(
+                    rx.text(product["nome"], class_name="stock-table-cell stock-product"),
+                    rx.text(product["categoria"], class_name="stock-table-cell"),
+                    rx.text(
+                        product["estoque"],
+                        class_name=rx.cond(
+                            product["situacao"] == "repor",
+                            "stock-table-cell stock-critical",
+                            "stock-table-cell stock-value",
+                        ),
+                    ),
+                    rx.text(product["minimo"], class_name="stock-table-cell"),
+                    rx.text(
+                        rx.cond(product["situacao"] == "repor", "Repor", "Normal"),
+                        class_name=rx.cond(
+                            product["situacao"] == "repor",
+                            "stock-status stock-status-danger",
+                            "stock-status stock-status-success",
+                        ),
+                    ),
+                    class_name="stock-table-row",
+                ),
+            ),
             feedback_message(),
+            class_name="content-card stock-card",
             width="100%",
-            spacing="4",
+            spacing="0",
         )
     )
 
@@ -2204,12 +2408,24 @@ def sale_form() -> rx.Component:
 
 def sales_history() -> rx.Component:
     return rx.vstack(
-        page_header("Vendas", "Consulte pedidos registrados e seus respectivos atendimentos."),
+        rx.hstack(
+            rx.heading("Vendas", size="7", class_name="sales-page-title"),
+            rx.link(
+                "Nova venda",
+                href="/atendimento",
+                class_name="new-sale-button",
+            ),
+            justify="between",
+            align_items="center",
+            width="100%",
+        ),
         rx.box(
             rx.text("Venda", class_name="table-heading"),
-            rx.text("Pedido", class_name="table-heading"),
-            rx.text("Cliente / atendente", class_name="table-heading"),
+            rx.text("Data", class_name="table-heading"),
+            rx.text("Cliente", class_name="table-heading"),
+            rx.text("Produtos", class_name="table-heading"),
             rx.text("Canal", class_name="table-heading"),
+            rx.text("Atendente", class_name="table-heading"),
             rx.text("Total", class_name="table-heading"),
             class_name="sales-table-head",
         ),
@@ -2217,51 +2433,13 @@ def sales_history() -> rx.Component:
             State.vendas,
             lambda sale: rx.box(
                 rx.text(sale["id"], class_name="table-cell strong"),
-                rx.text(sale["pedido"], class_name="table-cell"),
-                rx.vstack(
-                    rx.text(sale["atendente"], class_name="table-cell strong"),
-                    rx.text(sale["data"], class_name="muted"),
-                    align_items="start",
-                    spacing="0",
-                ),
-                status_badge(sale["canal"], "info"),
-                rx.vstack(
-                    rx.text("R$ ", sale["total"], class_name="table-cell strong"),
-                    status_badge(sale["status"], "success"),
-                    align_items="end",
-                    spacing="1",
-                ),
+                rx.text(sale["data"], class_name="table-cell"),
+                rx.text(sale["cliente"], class_name="table-cell"),
+                rx.text(sale["produtos"], class_name="table-cell products-cell"),
+                channel_badge(sale["canal"]),
+                rx.text(sale["atendente"], class_name="table-cell"),
+                rx.text("R$ ", sale["total"], class_name="table-cell strong"),
                 class_name="sales-table-row",
-            ),
-        ),
-        rx.heading("Pedidos e itens", size="5"),
-        rx.foreach(
-            State.pedidos,
-            lambda order: rx.vstack(
-                rx.text(
-                    "Pedido ",
-                    order["id"],
-                    " - Cliente: ",
-                    order["cliente"],
-                    " - ",
-                    order["status"],
-                    " - ",
-                    order["canal"],
-                ),
-                rx.foreach(
-                    State.itens_pedido,
-                    lambda item: rx.cond(
-                        item["pedido"] == order["id"],
-                        rx.text(
-                            "Produto ",
-                            item["produto"],
-                            " - Quantidade: ",
-                            item["quantidade"],
-                        ),
-                        rx.fragment(),
-                    ),
-                ),
-                width="100%",
             ),
         ),
         feedback_message(),
@@ -2297,13 +2475,14 @@ def sales_page() -> rx.Component:
 GLOBAL_STYLE = {
     "body": {
         "margin": "0",
-        "background": "linear-gradient(160deg, #eef6f1, #d8ece1)",
-        "color": "#0f2a20",
+        "background": "radial-gradient(900px 500px at 0% 0%, rgba(20,184,166,0.22), transparent 60%), linear-gradient(160deg, #020808, #04110f)",
+        "background_attachment": "fixed",
+        "color": "#ffffff",
         "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         "min_height": "100vh",
     },
     "a": {
-        "color": "#0f6e56",
+        "color": "#5eead4",
         "text_decoration": "none",
         "font_size": "0.875rem",
         "font_weight": "600",
@@ -2312,26 +2491,30 @@ GLOBAL_STYLE = {
         "font_family": "inherit",
         "cursor": "pointer",
         "transition": "transform 0.15s ease, opacity 0.15s ease",
-        "background": "#0f6e56",
+        "background": "#0b8277",
         "color": "#ffffff",
-        "border": "1px solid #0f6e56",
+        "border": "1px solid #0b8277",
         "border_radius": "10px",
         "font_weight": "700",
+        "box_shadow": "0 0 16px rgba(20,184,166,0.35)",
     },
     "input, textarea, select": {
-        "border": "1px solid #d6e6dc",
+        "border": "1px solid #17332f",
         "border_radius": "10px",
-        "background": "#f8fcf9",
-        "color": "#0f2a20",
+        "background": "rgba(255,255,255,0.04)",
+        "color": "#ffffff",
     },
     ".login-page": {
         "min_height": "100vh",
         "display": "flex",
-        "align_items": "center",
-        "justify_content": "center",
-        "padding": "1.25rem",
+        "align_items": "stretch",
+        "justify_content": "space-between",
+        "padding": "clamp(2rem, 7vw, 5rem) clamp(2rem, 4.5vw, 4rem)",
+        "gap": "clamp(2rem, 8vw, 8rem)",
+        "background": "radial-gradient(520px 360px at 5% 85%, rgba(13,148,136,0.42), transparent 70%), radial-gradient(520px 420px at 95% 0%, rgba(14,116,144,0.55), transparent 70%), #020808",
         "position": "relative",
         "overflow": "hidden",
+        "flex_wrap": "wrap",
     },
     ".login-decoration": {
         "position": "fixed",
@@ -2350,83 +2533,302 @@ GLOBAL_STYLE = {
         "height": "26rem",
         "left": "-9rem",
         "bottom": "-8rem",
-        "background": "radial-gradient(circle, #6fbe95, #2f8f6b 70%)",
+        "background": "radial-gradient(circle, #0d9488, #075e54 70%)",
     },
     ".login-blob-right": {
         "width": "16rem",
         "height": "16rem",
         "right": "-5rem",
         "top": "-4rem",
-        "background": "radial-gradient(circle, #b8e6c9, #7fcba0 70%)",
+        "background": "radial-gradient(circle, #22d3ee, #155e75 70%)",
     },
+    ".login-hero-copy": {
+        "position": "relative",
+        "z_index": "1",
+        "flex": "1 1 32rem",
+        "max_width": "45rem",
+        "align_self": "center",
+        "display": "flex",
+        "flex_direction": "column",
+        "justify_content": "center",
+        "gap": "1.25rem",
+    },
+    ".login-brand": {"gap": "0.65rem", "margin_bottom": "2.5rem"},
+    ".login-brand-neon": {
+        "color": "#f8fafc",
+        "font_size": "1.9rem",
+        "font_weight": "700",
+        "letter_spacing": "-0.04em",
+    },
+    ".login-brand-accent": {"color": "#2dd4bf"},
+    ".login-logo-mark": {
+        "width": "3.5rem",
+        "height": "3.5rem",
+        "display": "flex",
+        "position": "relative",
+        "border": "2px solid #08d9dc",
+        "border_radius": "0.9rem",
+        "background": "rgba(5,22,22,0.9)",
+        "box_shadow": "0 0 12px rgba(34,211,238,0.9), 0 0 32px rgba(20,184,166,0.45)",
+    },
+    ".login-logo-plus": {
+        "position": "absolute",
+        "left": "0.55rem",
+        "top": "0.72rem",
+        "width": "1.7rem",
+        "height": "1.7rem",
+    },
+    ".login-logo-plus-horizontal": {
+        "position": "absolute",
+        "left": "0",
+        "top": "0.55rem",
+        "width": "1.7rem",
+        "height": "0.58rem",
+        "border_radius": "0.2rem",
+        "background": "#ffffff",
+    },
+    ".login-logo-plus-vertical": {
+        "position": "absolute",
+        "left": "0.56rem",
+        "top": "0",
+        "width": "0.58rem",
+        "height": "1.7rem",
+        "border_radius": "0.2rem",
+        "background": "#ffffff",
+    },
+    ".login-logo-bars": {
+        "position": "absolute",
+        "right": "0.42rem",
+        "bottom": "0.48rem",
+        "height": "0.9rem",
+    },
+    ".login-logo-bar": {
+        "width": "0.22rem",
+        "border_radius": "0.2rem",
+        "background": "#18d8d1",
+        "box_shadow": "0 0 6px rgba(34,211,238,0.9)",
+    },
+    ".login-logo-bar-short": {"height": "0.32rem"},
+    ".login-logo-bar-medium": {"height": "0.58rem"},
+    ".login-logo-bar-tall": {"height": "0.86rem"},
+    ".login-hero-title": {
+        "color": "#ffffff",
+        "font_size": "clamp(2.5rem, 4vw, 3.6rem)",
+        "line_height": "1.08",
+        "letter_spacing": "-0.035em",
+    },
+    ".neon-gradient-text": {
+        "background": "linear-gradient(90deg, #34d399, #2dd4bf 50%, #22d3ee)",
+        "background_clip": "text",
+        "color": "transparent",
+    },
+    ".login-hero-description": {
+        "color": "#9fb8b4",
+        "font_size": "0.95rem",
+        "line_height": "1.5",
+        "max_width": "29rem",
+    },
+    ".login-feature-pills": {"gap": "0.75rem", "width": "100%"},
+    ".feature-pill": {
+        "padding": "0.55rem 0.95rem",
+        "border_radius": "999px",
+        "font_size": "0.78rem",
+        "line_height": "1",
+        "border": "1px solid",
+        "white_space": "nowrap",
+        "color": "#ffffff",
+    },
+    ".feature-pill-dot": {
+        "width": "0.65rem",
+        "height": "0.65rem",
+        "border_radius": "999px",
+        "flex_shrink": "0",
+        "box_shadow": "0 0 8px currentColor",
+    },
+    ".feature-pill-green": {
+        "color": "#ffffff",
+        "background": "rgba(52,211,153,0.12)",
+        "border_color": "rgba(52,211,153,0.5)",
+    },
+    ".feature-pill-dot-green": {"background": "#34d399", "color": "#34d399"},
+    ".feature-pill-cyan": {
+        "color": "#ffffff",
+        "background": "rgba(34,211,238,0.12)",
+        "border_color": "rgba(34,211,238,0.5)",
+    },
+    ".feature-pill-dot-cyan": {"background": "#22d3ee", "color": "#22d3ee"},
+    ".feature-pill-purple": {
+        "color": "#ffffff",
+        "background": "rgba(167,139,250,0.12)",
+        "border_color": "rgba(167,139,250,0.5)",
+    },
+    ".feature-pill-dot-purple": {"background": "#a78bfa", "color": "#a78bfa"},
+    ".feature-pill-yellow": {
+        "color": "#ffffff",
+        "background": "rgba(250,204,21,0.08)",
+        "border_color": "rgba(250,204,21,0.55)",
+    },
+    ".feature-pill-dot-yellow": {"background": "#facc15", "color": "#facc15"},
+    ".feature-pill-blue": {
+        "color": "#ffffff",
+        "background": "rgba(91,155,255,0.12)",
+        "border_color": "rgba(91,155,255,0.5)",
+    },
+    ".feature-pill-dot-blue": {"background": "#5b9bff", "color": "#5b9bff"},
     ".login-panel": {
         "width": "100%",
-        "max_width": "34rem",
-        "padding": "3rem",
-        "border": "1px solid rgba(255,255,255,0.7)",
-        "border_radius": "26px",
-        "background": "rgba(255,255,255,0.72)",
-        "box_shadow": "0 10px 30px -12px rgba(15,60,45,0.25)",
+        "max_width": "24rem",
+        "padding": "2.5rem 2.5rem 1.8rem",
+        "border": "1px solid rgba(45,212,191,0.5)",
+        "border_radius": "1.4rem",
+        "background": "rgba(6,22,20,0.72)",
+        "box_shadow": "0 0 0 1px rgba(34,211,238,0.12), 0 0 60px rgba(20,184,166,0.3), 0 30px 60px -20px rgba(0,0,0,0.8)",
         "backdrop_filter": "blur(18px)",
         "position": "relative",
         "z_index": "1",
+        "align_self": "center",
+    },
+    ".login-title": {
+        "color": "#f8fafc",
+        "font_size": "1.8rem",
+        "margin_bottom": "0",
     },
     ".brand-mark, .nav-brand": {
-        "color": "#0a4e3d",
+        "color": "#2dd4bf",
         "font_weight": "800",
+        "font_size": "0.75rem",
         "letter_spacing": "-0.03em",
     },
     ".brand-mark": {"font_size": "1.1rem"},
     ".login-subtitle, .page-description, .muted": {
-        "color": "#5c7568",
-        "font_size": "0.9rem",
+        "color": "#8fb0ab",
+        "font_size": "0.72rem",
     },
-    ".role-grid": {"gap": "1rem"},
+    ".role-grid": {"gap": "0.65rem"},
     ".role-card": {
         "flex": "1",
         "min_width": "0",
-        "min_height": "7rem",
-        "padding": "1.5rem 1.25rem",
-        "border": "1px solid #d6e6dc",
-        "border_radius": "16px",
-        "background": "#ffffff",
-        "color": "#0f6e56",
+        "min_height": "5.35rem",
+        "padding": "0.55rem",
+        "border": "1px solid #214540",
+        "border_radius": "0.85rem",
+        "background": "rgba(255,255,255,0.03)",
+        "color": "#ffffff",
         "border_color": "#d6e6dc",
         "display": "flex",
         "flex_direction": "column",
         "align_items": "center",
         "justify_content": "center",
-        "gap": "0.5rem",
+        "gap": "0.25rem",
         "white_space": "nowrap",
     },
     ".role-card-active": {
-        "border": "2px solid #0f6e56",
-        "background": "#e1f5ee",
+        "border": "1px solid #14b8a6",
+        "background": "rgba(13,148,136,0.18)",
+        "box_shadow": "0 0 22px rgba(20,184,166,0.28)",
+    },
+    ".role-card-active .role-icon": {
+        "background": "rgba(20,184,166,0.22)",
+        "color": "#2dd4bf",
     },
     ".role-icon": {
-        "width": "3rem",
-        "height": "3rem",
+        "width": "2.4rem",
+        "height": "2.4rem",
         "border_radius": "999px",
-        "background": "#e1f5ee",
+        "background": "rgba(255,255,255,0.06)",
         "display": "flex",
         "align_items": "center",
         "justify_content": "center",
         "font_weight": "800",
     },
     ".field-label": {
-        "color": "#5c7568",
-        "font_size": "0.8rem",
-        "font_weight": "600",
+        "color": "#9fb8b4",
+        "font_size": "0.65rem",
+        "font_weight": "500",
+        "margin_top": "0.25rem",
+        "margin_bottom": "-0.15rem",
+    },
+    ".login-panel input": {
+        "border_radius": "14px",
+        "border": "0",
+        "background": "transparent",
+        "box_shadow": "none",
+        "outline": "none",
+        "appearance": "none",
+        "background_clip": "padding-box",
+        "padding": "0.4rem 0.75rem 0.7rem",
+        "font_size": "0.68rem",
+        "height": "2.25rem",
+        "text_align": "left",
+        "line_height": "1.25rem",
+    },
+    ".login-panel .rt-TextFieldRoot": {
+        "border": "1px solid #214540",
+        "border_radius": "14px",
+        "background": "#102522",
+        "box_shadow": "none",
+        "outline": "none",
+        "overflow": "hidden",
+    },
+    ".login-panel .rt-TextFieldRoot:focus-within": {
+        "border_color": "#214540",
+        "box_shadow": "0 0 0 1px rgba(20,184,166,0.2)",
+    },
+    ".login-panel input:focus": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".login-panel input::placeholder": {
+        "color": "#ffffff",
+        "opacity": "1",
+    },
+    ".password-field": {
+        "position": "relative",
+        "width": "100%",
+    },
+    ".password-field input": {
+        "padding_right": "4.5rem",
+    },
+    ".show-password": {
+        "position": "absolute",
+        "right": "0.35rem",
+        "top": "50%",
+        "transform": "translateY(-50%)",
+        "padding": "0.15rem 0.3rem",
+        "min_height": "0",
+        "height": "auto",
+        "border": "none",
+        "background": "transparent",
+        "box_shadow": "none",
+        "color": "#5eead4",
+        "font_size": "0.62rem",
+        "font_weight": "700",
     },
     ".primary-button": {
-        "background": "#0f6e56",
+        "background": "linear-gradient(90deg, #0b8277, #0e7490)",
         "color": "#ffffff",
         "border_radius": "10px",
         "font_weight": "700",
         "padding": "0.7rem 1rem",
     },
     ".login-submit": {
-        "margin_top": "0.75rem",
+        "margin_top": "0.6rem",
+        "height": "2.45rem",
+    },
+    ".forgot-password": {
+        "align_self": "end",
+        "color": "#5eead4",
+        "font_size": "0.68rem",
+        "text_decoration": "underline",
+        "cursor": "pointer",
+    },
+    ".login-panel-line": {
+        "height": "2px",
+        "width": "100%",
+        "margin_top": "0.65rem",
+        "background": "linear-gradient(90deg, #14b8a6, #22d3ee 55%, #facc15)",
+        "box_shadow": "0 0 8px rgba(34,211,238,0.5)",
     },
     ".feedback": {
         "padding": "0.75rem 1rem",
@@ -2441,17 +2843,31 @@ GLOBAL_STYLE = {
     ".app-shell": {
         "width": "100%",
         "min_height": "100vh",
+        "background": "radial-gradient(900px 500px at 0% 0%, rgba(20,184,166,0.22), transparent 60%), linear-gradient(160deg, #020808, #04110f)",
+        "padding_left": "15rem",
     },
     ".topbar": {
-        "padding": "1rem clamp(1rem, 4vw, 3rem)",
-        "background": "rgba(255,255,255,0.72)",
-        "border_bottom": "1px solid #d6e6dc",
+        "position": "fixed",
+        "left": "0",
+        "top": "0",
+        "bottom": "0",
+        "width": "15rem",
+        "padding": "2rem 1.25rem",
+        "background": "rgba(6,22,20,0.82)",
+        "border_right": "1px solid #17332f",
         "backdrop_filter": "blur(12px)",
         "overflow_x": "hidden",
         "gap": "0.25rem",
+        "z_index": "10",
     },
     ".nav-links": {"gap": "0.8rem", "align_items": "center"},
-    ".nav-tabs": {"gap": "0.35rem", "align_items": "center", "wrap": "wrap"},
+    ".nav-tabs": {
+        "gap": "0.35rem",
+        "align_items": "stretch",
+        "wrap": "nowrap",
+        "flex_direction": "column",
+        "width": "100%",
+    },
     ".nav-menu": {"margin_top": "0.5rem"},
     ".nav-tab": {
         "padding": "0.45rem 0.75rem",
@@ -2460,11 +2876,15 @@ GLOBAL_STYLE = {
         "font_size": "0.8rem",
         "font_weight": "600",
         "white_space": "nowrap",
+        "width": "100%",
+        "text_align": "left",
+        "transition": "background 0.08s ease-out, border-color 0.08s ease-out, color 0.08s ease-out, transform 0.08s ease-out",
     },
     ".nav-tab-active": {
-        "background": "#e1f5ee",
-        "border_color": "#0f6e56",
-        "color": "#0a4e3d",
+        "background": "rgba(20,184,166,0.16)",
+        "border_color": "#14b8a6",
+        "color": "#ffffff",
+        "transform": "scale(1.02)",
     },
     ".nav-context": {
         "color": "#5c7568",
@@ -2473,7 +2893,7 @@ GLOBAL_STYLE = {
         "letter_spacing": "0.08em",
     },
     ".nav-user-title": {
-        "color": "#0f2a20",
+        "color": "#ffffff",
         "font_size": "0.95rem",
         "font_weight": "800",
         "width": "auto",
@@ -2481,7 +2901,7 @@ GLOBAL_STYLE = {
     },
     ".nav-user": {"color": "#5c7568", "font_size": "0.8rem"},
     ".logout-button": {
-        "background": "#0f6e56",
+        "background": "#0b8277",
         "color": "#ffffff",
         "border": "1px solid #0f6e56",
         "border_radius": "10px",
@@ -2500,40 +2920,174 @@ GLOBAL_STYLE = {
     },
     ".content-card": {
         "padding": "1.25rem",
-        "border": "1px solid #d6e6dc",
+        "border": "1px solid #17332f",
         "border_radius": "18px",
-        "background": "#ffffff",
-        "box_shadow": "0 10px 30px -12px rgba(15,60,45,0.18)",
+        "background": "#081312",
+        "box_shadow": "0 10px 30px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(120,230,215,0.1)",
         "overflow_x": "auto",
     },
     ".table-heading": {
-        "color": "#5c7568",
-        "font_size": "0.72rem",
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
         "font_weight": "700",
-        "text_transform": "uppercase",
-        "letter_spacing": "0.04em",
+        "text_align": "center",
+    },
+    ".sales-page-title": {
+        "color": "#ffffff",
+        "font_size": "1.25rem",
+    },
+    ".new-sale-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.7rem 1.25rem",
+        "border_radius": "0.75rem",
+        "background": "linear-gradient(90deg, #0b8277, #0e7490)",
+        "color": "#ffffff",
+        "font_size": "0.9rem",
+        "font_weight": "700",
+        "box_shadow": "0 0 18px rgba(20,184,166,0.3)",
     },
     ".sales-table-head, .sales-table-row": {
         "display": "grid",
-        "grid_template_columns": "0.7fr 1fr 1.5fr 0.9fr 1fr",
-        "gap": "0.8rem",
+        "grid_template_columns": "0.75fr 0.65fr 1.05fr 1.65fr 0.85fr 0.9fr 0.8fr",
+        "gap": "1rem",
         "align_items": "center",
-        "min_width": "38rem",
+        "min_width": "68rem",
     },
     ".sales-table-head": {
-        "padding": "0.75rem 0",
-        "border_bottom": "1px solid #d6e6dc",
+        "padding": "1rem 0 0.75rem",
+        "border_bottom": "1px solid #17332f",
     },
     ".sales-table-row": {
         "padding": "0.85rem 0",
-        "border_bottom": "1px solid #edf3ef",
+        "border_bottom": "1px solid #17332f",
     },
     ".table-cell": {
-        "font_size": "0.84rem",
-        "color": "#0f2a20",
+        "font_size": "0.82rem",
+        "color": "#ffffff",
         "text_align": "center",
     },
-    ".strong": {"font_weight": "700", "color": "#0a4e3d"},
+    ".products-cell": {"line_height": "1.35", "text_align": "center"},
+    ".sales-table-row .status-badge": {
+        "justify_self": "center",
+    },
+    ".customers-card": {
+        "padding": "1.25rem 1.75rem",
+        "border_radius": "1.35rem",
+    },
+    ".customers-page-title": {
+        "color": "#ffffff",
+        "font_size": "1.25rem",
+    },
+    ".new-customer-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.7rem 1.25rem",
+        "border_radius": "0.75rem",
+        "background": "linear-gradient(90deg, #0b8277, #0e7490)",
+        "color": "#ffffff",
+        "font_size": "0.9rem",
+        "font_weight": "700",
+        "box_shadow": "0 0 18px rgba(20,184,166,0.3)",
+    },
+    ".customer-table-head, .customer-table-row": {
+        "display": "grid",
+        "grid_template_columns": "1.2fr 1fr 1.1fr 1.45fr 1.35fr 1.2fr",
+        "gap": "1rem",
+        "align_items": "center",
+        "min_width": "68rem",
+    },
+    ".customer-table-head": {
+        "padding": "1rem 0 0.75rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".customer-table-row": {
+        "padding": "0.75rem 0",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".customer-table-heading": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "font_weight": "700",
+        "text_align": "left",
+    },
+    ".customer-table-cell": {
+        "color": "#ffffff",
+        "font_size": "0.82rem",
+        "text_align": "left",
+    },
+    ".customer-name": {"font_weight": "500"},
+    ".customer-edit-button": {
+        "background": "transparent",
+        "border": "1px solid #14b8a6",
+        "color": "#ffffff",
+        "padding": "0.4rem 0.8rem",
+        "box_shadow": "none",
+    },
+    ".customer-remove-button": {
+        "background": "#ef4b55",
+        "border": "1px solid #ef4b55",
+        "color": "#ffffff",
+        "padding": "0.4rem 0.8rem",
+        "box_shadow": "none",
+    },
+    ".stock-card": {
+        "padding": "1.25rem 1.75rem",
+        "border_radius": "1.35rem",
+    },
+    ".stock-table-head, .stock-table-row": {
+        "display": "grid",
+        "grid_template_columns": "1.55fr 1.1fr 0.65fr 0.65fr 0.75fr",
+        "gap": "1rem",
+        "align_items": "center",
+        "min_width": "52rem",
+    },
+    ".stock-table-head": {
+        "padding": "1rem 0 0.75rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".stock-table-row": {
+        "padding": "0.8rem 0",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".stock-table-heading": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "font_weight": "700",
+        "text_align": "center",
+    },
+    ".stock-table-cell": {
+        "color": "#ffffff",
+        "font_size": "0.82rem",
+        "text_align": "center",
+    },
+    ".stock-product": {"font_weight": "500", "text_align": "center"},
+    ".stock-value": {"font_weight": "700", "text_align": "center"},
+    ".stock-critical": {
+        "color": "#ff5a63",
+        "font_weight": "700",
+    },
+    ".stock-status": {
+        "justify_self": "center",
+        "display": "inline-flex",
+        "padding": "0.3rem 0.75rem",
+        "border_radius": "999px",
+        "font_size": "0.75rem",
+        "font_weight": "700",
+    },
+    ".stock-status-success": {
+        "color": "#34d399",
+        "background": "rgba(16,185,129,0.12)",
+        "border": "1px solid rgba(16,185,129,0.65)",
+    },
+    ".stock-status-danger": {
+        "color": "#ff5a63",
+        "background": "rgba(239,68,68,0.12)",
+        "border": "1px solid rgba(239,68,68,0.65)",
+    },
+    ".strong": {"font_weight": "700", "color": "#ffffff"},
     ".status-badge": {
         "display": "inline-block",
         "padding": "0.2rem 0.65rem",
@@ -2546,6 +3100,20 @@ GLOBAL_STYLE = {
     ".status-badge-info": {"background": "#e4f0f8", "color": "#28607f"},
     ".status-badge-warning": {"background": "#fff0d6", "color": "#8a5a12"},
     ".status-badge-danger": {"background": "#fcebea", "color": "#a32d2d"},
+    ".channel-badge": {
+        "border": "1px solid",
+        "padding": "0.35rem 0.75rem",
+    },
+    ".channel-badge-presencial": {
+        "background": "rgba(143,176,171,0.12)",
+        "border_color": "rgba(143,176,171,0.55)",
+        "color": "#a9c5c0",
+    },
+    ".channel-badge-online": {
+        "background": "rgba(34,211,238,0.12)",
+        "border_color": "rgba(34,211,238,0.7)",
+        "color": "#22d3ee",
+    },
     ".supplier-row": {
         "display": "grid",
         "grid_template_columns": "1.3fr 1fr 1.4fr auto auto",
@@ -2577,9 +3145,9 @@ GLOBAL_STYLE = {
         "min_width": "0",
         "height": "7rem",
         "padding": "1rem",
-        "border": "1px solid #d6e6dc",
+        "border": "1px solid #17332f",
         "border_radius": "14px",
-        "background": "#ffffff",
+        "background": "#081312",
         "box_sizing": "border-box",
         "display": "flex",
         "align_items": "center",
@@ -2592,7 +3160,7 @@ GLOBAL_STYLE = {
         "margin_bottom": "1.25rem",
     },
     ".stat-card-number": {
-        "color": "#0a4e3d",
+        "color": "#5eead4",
         "font_size": "1.65rem",
         "font_weight": "800",
     },
@@ -2600,10 +3168,14 @@ GLOBAL_STYLE = {
         "color": "#5c7568",
         "font_size": "0.75rem",
     },
+    ".role-label": {
+        "font_size": "0.68rem",
+        "font_weight": "700",
+    },
     ".stock-alert-head, .stock-alert-row": {
         "display": "grid",
         "grid_template_columns": "2fr 1fr 1fr 1fr",
-        "gap": "1rem",
+        "gap": "0.65rem",
         "align_items": "center",
         "min_width": "34rem",
         "text_align": "center",
@@ -2620,8 +3192,24 @@ GLOBAL_STYLE = {
         "text_align": "left",
     },
     "@media (max-width: 700px)": {
-        ".login-panel": {"padding": "2rem 1.5rem"},
+        ".login-page": {"padding": "1.25rem"},
+        ".login-hero-copy": {"gap": "0.75rem", "flex_basis": "100%"},
+        ".login-hero-title": {"font_size": "2.3rem"},
+        ".login-hero-description": {"font_size": "0.95rem"},
+        ".login-panel": {
+            "max_width": "none",
+            "padding": "2rem 1.5rem",
+            "flex_basis": "100%",
+        },
         ".nav-links": {"gap": "0.6rem"},
+        ".app-shell": {"padding_left": "0"},
+        ".topbar": {
+            "position": "relative",
+            "width": "100%",
+            "padding": "1rem",
+            "border_right": "0",
+            "border_bottom": "1px solid #d6e6dc",
+        },
         ".nav-brand": {"width": "100%"},
         ".nav-tabs": {"width": "100%", "overflow_x": "auto", "padding_bottom": "0.2rem"},
         ".page-content": {"padding": "1rem 0.75rem"},
