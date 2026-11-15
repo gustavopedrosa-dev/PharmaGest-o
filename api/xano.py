@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -176,8 +177,16 @@ class XanoClient:
         timeout: float = 10.0,
     ) -> None:
         configured_url = base_url or os.environ.get("XANO_BASE_URL", "")
-        if not configured_url:
-            raise XanoError("XANO_BASE_URL nÃ£o configurada.")
+        parsed_url = urlparse(configured_url)
+        if (
+            not configured_url
+            or parsed_url.scheme not in {"http", "https"}
+            or not parsed_url.netloc
+            or parsed_url.hostname == "seu-workspace.xano.io"
+        ):
+            raise XanoError(
+                "Configure XANO_BASE_URL com a URL real do seu workspace Xano."
+            )
         self.base_url = configured_url.rstrip("/")
         self.timeout = timeout
         self._transport = transport
