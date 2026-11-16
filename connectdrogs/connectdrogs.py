@@ -23,6 +23,70 @@ from api.xano import (
 from rxconfig import config
 
 
+def build_customer_address_payload(
+    address: dict[str, str],
+) -> tuple[dict[str, object] | None, str | None]:
+    cidade = address["cidade"].strip()
+    estado = address["estado"].strip()
+    if not cidade or not estado:
+        return None, "Cidade e estado são obrigatórios para cada endereço."
+    return {
+        "logradouro": address["logradouro"].strip() or None,
+        "numero": address["numero"].strip() or None,
+        "bairro": address["bairro"].strip() or None,
+        "cidade": cidade,
+        "estado": estado,
+        "cep": address["cep"].strip() or None,
+        "complemento": address["complemento"].strip(),
+    }, None
+
+
+def mark_customer_address_saved(
+    addresses: list[dict[str, str]],
+    form_key: str,
+    address_id: int,
+) -> list[dict[str, str]]:
+    return [
+        {**address, "id": str(address_id)}
+        if address["form_key"] == form_key
+        else address
+        for address in addresses
+    ]
+
+
+def persist_customer_addresses(
+    client: XanoClient,
+    token: str,
+    customer_id: int,
+    addresses: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], Exception | None]:
+    saved_addresses = [dict(address) for address in addresses]
+    for address in saved_addresses:
+        payload, error = build_customer_address_payload(address)
+        if error is not None:
+            return saved_addresses, ValueError(error)
+        if payload is None:
+            continue
+        try:
+            if address["id"]:
+                client.update_address(
+                    token,
+                    customer_id,
+                    int(address["id"]),
+                    payload,
+                )
+            else:
+                created = client.create_address(token, customer_id, payload)
+                saved_addresses = mark_customer_address_saved(
+                    saved_addresses,
+                    address["form_key"],
+                    created.id,
+                )
+        except (ValueError, XanoError) as exc:
+            return saved_addresses, exc
+    return saved_addresses, None
+
+
 class State(rx.State):
     """Estado server-side; o token privado nunca é serializado para o navegador."""
 
@@ -83,9 +147,12 @@ class State(rx.State):
     cliente_id: str = ""
     cliente_nome: str = ""
     cliente_cpf: str = ""
-    cliente_data_nascimento: str = "1990-01-01"
+    cliente_data_nascimento: str = ""
     cliente_telefone: str = ""
     cliente_email: str = ""
+    cliente_form_aberto: bool = False
+    cliente_enderecos: list[dict[str, str]] = []
+    cliente_endereco_proxima_chave: int = 0
     endereco_logradouro: str = ""
     endereco_numero: str = ""
     endereco_bairro: str = ""
@@ -304,6 +371,18 @@ class State(rx.State):
         self.mensagem = ""
 
     @rx.event
+    def cancel_sale(self) -> rx.event.EventSpec:
+        self.venda_produto_id = ""
+        self.venda_quantidade = "1"
+        self.venda_cliente_id = ""
+        self.venda_canal = "presencial"
+        self.venda_pagamento = "dinheiro"
+        self.venda_receita = ""
+        self.venda_itens = []
+        self.mensagem = ""
+        return rx.redirect("/vendas")
+
+    @rx.event
     def login_user(self) -> rx.event.EventSpec | None:
         try:
             token, session = XanoClient().login(self.login_input, self.senha_input)
@@ -424,6 +503,14 @@ class State(rx.State):
         return None
 
     @rx.event
+    def cancel_account_form(self) -> rx.event.EventSpec:
+        self.novo_login = ""
+        self.senha_atual = ""
+        self.nova_senha = ""
+        self.mensagem = ""
+        return rx.redirect("/vendas")
+
+    @rx.event
     def load_products(self) -> rx.event.EventSpec | None:
         redirect = self.load_session()
         if redirect is not None:
@@ -485,6 +572,68 @@ class State(rx.State):
         except XanoError as exc:
             self.mensagem = exc.message
         return None
+    @rx.event
+    def open_customer_form(self) -> None:
+        self.cliente_id = ""
+        self.cliente_nome = ""
+        self.cliente_cpf = ""
+        self.cliente_data_nascimento = ""
+        self.cliente_telefone = ""
+        self.cliente_email = ""
+        self.cliente_enderecos = []
+        self.cliente_endereco_proxima_chave = 0
+        self.mensagem = ""
+        self.cliente_form_aberto = True
+
+    @rx.event
+    def close_customer_form(self) -> None:
+        self.cliente_form_aberto = False
+        self.cliente_enderecos = []
+        self.mensagem = ""
+
+    @rx.event
+    def add_customer_address(self) -> None:
+        form_key = str(self.cliente_endereco_proxima_chave)
+        self.cliente_enderecos = [
+            *self.cliente_enderecos,
+            {
+                "form_key": form_key,
+                "id": "",
+                "logradouro": "",
+                "numero": "",
+                "bairro": "",
+                "cidade": "",
+                "estado": "",
+                "cep": "",
+                "complemento": "",
+            },
+        ]
+        self.cliente_endereco_proxima_chave += 1
+
+    @rx.event
+    def set_customer_address_field(
+        self,
+        form_key: str,
+        field: str,
+        value: str,
+    ) -> None:
+        address_fields = {
+            "logradouro",
+            "numero",
+            "bairro",
+            "cidade",
+            "estado",
+            "cep",
+            "complemento",
+        }
+        if field not in address_fields:
+            return
+        self.cliente_enderecos = [
+            {**address, field: value}
+            if address["form_key"] == form_key
+            else address
+            for address in self.cliente_enderecos
+        ]
 
     @rx.event
     def load_employees(self) -> rx.event.EventSpec | None:
@@ -620,6 +769,7 @@ class State(rx.State):
             self.clientes = [*self.clientes, self._customer_view(customer)]
             self.cliente_id = str(customer.id)
             self.mensagem = "Cliente cadastrado."
+            self.cliente_form_aberto = False
         except ValueError:
             self.mensagem = "Preencha a data de nascimento no formato AAAA-MM-DD."
         except XanoUnauthorizedError:
@@ -632,9 +782,12 @@ class State(rx.State):
             self.mensagem = exc.message
 
     @rx.event
-    def update_customer(self) -> None:
+    def update_customer(self) -> rx.event.EventSpec | None:
         if self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
+            return
+        address_payloads = self._customer_address_payloads()
+        if address_payloads is None:
             return
         try:
             customer_id = int(self.cliente_id)
@@ -649,7 +802,12 @@ class State(rx.State):
                 else item
                 for item in self.clientes
             ]
+            if not self._save_customer_addresses(customer_id):
+                if not self.authenticated:
+                    return rx.redirect("/login")
+                return None
             self.mensagem = "Cliente atualizado."
+            self.cliente_form_aberto = False
         except ValueError:
             self.mensagem = "Informe um ID e uma data válidos."
         except XanoUnauthorizedError:
@@ -661,6 +819,47 @@ class State(rx.State):
         except XanoError as exc:
             self.mensagem = exc.message
 
+    def _customer_address_payloads(
+        self,
+    ) -> list[tuple[str, str, dict[str, object]]] | None:
+        address_payloads = []
+        for address in self.cliente_enderecos:
+            payload = self._customer_address_payload(address)
+            if payload is None:
+                return None
+            address_payloads.append(
+                (address["form_key"], address["id"], payload)
+            )
+        return address_payloads
+
+    def _save_customer_addresses(
+        self,
+        customer_id: int,
+    ) -> bool:
+        saved_addresses, error = persist_customer_addresses(
+            XanoClient(),
+            self._token,
+            customer_id,
+            self.cliente_enderecos,
+        )
+        self.cliente_enderecos = saved_addresses
+        if isinstance(error, XanoUnauthorizedError):
+            self._expire_session()
+            return False
+        if isinstance(error, XanoForbiddenError):
+            self.mensagem = FORBIDDEN_MESSAGE
+            return False
+        if isinstance(error, XanoUnavailableError):
+            self.mensagem = UNAVAILABLE_MESSAGE
+            return False
+        if isinstance(error, XanoError):
+            self.mensagem = error.message
+            return False
+        if isinstance(error, ValueError):
+            self.mensagem = "Informe um ID de endereço válido."
+            return False
+        return True
+
     @rx.event
     def deactivate_customer(self) -> None:
         if self.is_gestor:
@@ -668,14 +867,12 @@ class State(rx.State):
             return
         try:
             customer_id = int(self.cliente_id)
-            customer = XanoClient().deactivate_customer(self._token, customer_id)
+            XanoClient().deactivate_customer(self._token, customer_id)
             self.clientes = [
-                self._customer_view(customer)
-                if item["id"] == str(customer_id)
-                else item
-                for item in self.clientes
+                item for item in self.clientes if item["id"] != str(customer_id)
             ]
             self.mensagem = "Cliente inativado."
+            self.cliente_form_aberto = False
         except ValueError:
             self.mensagem = "Informe um ID de cliente válido."
         except XanoUnauthorizedError:
@@ -686,6 +883,51 @@ class State(rx.State):
             self.mensagem = UNAVAILABLE_MESSAGE
         except XanoError as exc:
             self.mensagem = exc.message
+
+    @rx.event
+    def edit_customer(
+        self,
+        customer_id: str,
+    ) -> rx.event.EventSpec | None:
+        customer = next(
+            (item for item in self.clientes if item["id"] == customer_id),
+            None,
+        )
+        if customer is None:
+            self.mensagem = "Cliente não encontrado."
+            return
+        self.cliente_id = customer["id"]
+        self.cliente_nome = customer["nome"]
+        self.cliente_cpf = customer["cpf"]
+        self.cliente_data_nascimento = customer["nascimento"]
+        self.cliente_telefone = customer["telefone"]
+        self.cliente_email = customer["email"]
+        self.mensagem = ""
+        self.cliente_enderecos = []
+        self.cliente_endereco_proxima_chave = 0
+        self.cliente_form_aberto = True
+        try:
+            addresses = XanoClient().list_addresses(self._token, int(customer_id))
+            self.cliente_enderecos = [
+                self._customer_address_form_view(address, str(index))
+                for index, address in enumerate(addresses)
+            ]
+            self.cliente_endereco_proxima_chave = len(addresses)
+        except XanoUnauthorizedError:
+            self._expire_session()
+            return rx.redirect("/login")
+        except XanoForbiddenError:
+            self.mensagem = FORBIDDEN_MESSAGE
+        except XanoUnavailableError:
+            self.mensagem = UNAVAILABLE_MESSAGE
+        except XanoError as exc:
+            self.mensagem = exc.message
+        return None
+
+    @rx.event
+    def deactivate_customer_by_id(self, customer_id: str) -> None:
+        self.cliente_id = customer_id
+        self.deactivate_customer()
 
     @rx.event
     def load_addresses(self) -> None:
@@ -1212,6 +1454,15 @@ class State(rx.State):
             "email": self.cliente_email or None,
         }
 
+    def _customer_address_payload(
+        self,
+        address: dict[str, str],
+    ) -> dict[str, object] | None:
+        payload, error = build_customer_address_payload(address)
+        if error is not None:
+            self.mensagem = error
+        return payload
+
     def _address_payload(self) -> dict[str, object]:
         return {
             "logradouro": self.endereco_logradouro or None,
@@ -1282,7 +1533,11 @@ class State(rx.State):
         ]
 
     def _set_customers(self, customers: list[Customer]) -> None:
-        self.clientes = [self._customer_view(customer) for customer in customers]
+        self.clientes = [
+            self._customer_view(customer)
+            for customer in customers
+            if self.is_gestor or customer.ativo
+        ]
 
     def _set_addresses(self, addresses: list[Address]) -> None:
         self.enderecos = [self._address_view(address) for address in addresses]
@@ -1317,6 +1572,16 @@ class State(rx.State):
             "estado": address.estado,
             "cep": address.cep,
             "complemento": address.complemento,
+        }
+
+    @staticmethod
+    def _customer_address_form_view(
+        address: Address,
+        form_key: str,
+    ) -> dict[str, str]:
+        return {
+            **State._address_view(address),
+            "form_key": form_key,
         }
 
     @staticmethod
@@ -1678,7 +1943,6 @@ def navigation() -> rx.Component:
                     class_name="nav-tabs",
                 ),
                 rx.hstack(
-                    navigation_tab("Atendimento", "/atendimento"),
                     navigation_tab("Minhas vendas", "/vendas"),
                     navigation_tab("Estoque", "/estoque"),
                     navigation_tab("Clientes", "/clientes"),
@@ -1830,6 +2094,7 @@ def customer_list() -> rx.Component:
             rx.text("Telefone", class_name="customer-table-heading"),
             rx.text("E-mail", class_name="customer-table-heading"),
             rx.text("Endereço", class_name="customer-table-heading"),
+            rx.text("Ações", class_name="customer-table-heading"),
             class_name="customer-table-head",
         ),
         rx.foreach(
@@ -1849,6 +2114,21 @@ def customer_list() -> rx.Component:
                     class_name="customer-table-cell",
                 ),
                 rx.text("—", class_name="customer-table-cell"),
+                rx.hstack(
+                    rx.button(
+                        "Editar",
+                        on_click=lambda: State.edit_customer(customer["id"]),
+                        class_name="customer-edit-button",
+                    ),
+                    rx.button(
+                        "Remover",
+                        on_click=lambda: State.deactivate_customer_by_id(
+                            customer["id"]
+                        ),
+                        class_name="customer-remove-button",
+                    ),
+                    spacing="2",
+                ),
                 class_name="customer-table-row",
             ),
         ),
@@ -1857,52 +2137,139 @@ def customer_list() -> rx.Component:
     )
 
 
-def customer_form() -> rx.Component:
+def customer_address_fields(address) -> rx.Component:
     return rx.vstack(
-        rx.heading("Manter cliente", size="5"),
-        rx.input(
-            placeholder="ID do cliente para editar ou inativar",
-            value=State.cliente_id,
-            on_change=lambda value: State.set_customer_field("cliente_id", value),
+        rx.text(
+            rx.cond(address["id"] != "", "Endereço cadastrado", "Novo endereço"),
+            class_name="muted",
         ),
         rx.input(
-            placeholder="Nome",
-            value=State.cliente_nome,
-            on_change=lambda value: State.set_customer_field("cliente_nome", value),
-        ),
-        rx.input(
-            placeholder="CPF",
-            value=State.cliente_cpf,
-            on_change=lambda value: State.set_customer_field("cliente_cpf", value),
-        ),
-        rx.input(
-            placeholder="Data de nascimento (AAAA-MM-DD)",
-            value=State.cliente_data_nascimento,
-            on_change=lambda value: State.set_customer_field(
-                "cliente_data_nascimento", value
+            placeholder="Logradouro",
+            value=address["logradouro"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "logradouro", value
             ),
         ),
         rx.input(
-            placeholder="Telefone",
-            value=State.cliente_telefone,
-            on_change=lambda value: State.set_customer_field(
-                "cliente_telefone", value
+            placeholder="Número",
+            value=address["numero"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "numero", value
             ),
         ),
         rx.input(
-            placeholder="E-mail",
-            value=State.cliente_email,
-            on_change=lambda value: State.set_customer_field("cliente_email", value),
+            placeholder="Bairro",
+            value=address["bairro"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "bairro", value
+            ),
         ),
-        rx.hstack(
-            rx.button("Cadastrar", on_click=State.create_customer),
-            rx.button("Atualizar", on_click=State.update_customer),
-            rx.button("Inativar", on_click=State.deactivate_customer),
+        rx.input(
+            placeholder="Cidade *",
+            value=address["cidade"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "cidade", value
+            ),
         ),
-        id="cliente-form",
+        rx.input(
+            placeholder="Estado *",
+            value=address["estado"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "estado", value
+            ),
+        ),
+        rx.input(
+            placeholder="CEP",
+            value=address["cep"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "cep", value
+            ),
+        ),
+        rx.input(
+            placeholder="Complemento",
+            value=address["complemento"],
+            on_change=lambda value: State.set_customer_address_field(
+                address["form_key"], "complemento", value
+            ),
+        ),
         width="100%",
-        class_name="content-card",
-        max_width="32rem",
+        spacing="2",
+        class_name="customer-address-fields",
+    )
+
+
+def customer_form() -> rx.Component:
+    return rx.box(
+        rx.vstack(
+            rx.heading(
+                rx.cond(State.cliente_id != "", "Editar Cliente", "Novo Cliente"),
+                size="5",
+            ),
+            rx.input(
+                placeholder="Nome",
+                value=State.cliente_nome,
+                on_change=lambda value: State.set_customer_field("cliente_nome", value),
+            ),
+            rx.input(
+                placeholder="CPF",
+                value=State.cliente_cpf,
+                on_change=lambda value: State.set_customer_field("cliente_cpf", value),
+            ),
+            rx.input(
+                placeholder="Data de nascimento (AAAA-MM-DD)",
+                value=State.cliente_data_nascimento,
+                on_change=lambda value: State.set_customer_field(
+                    "cliente_data_nascimento", value
+                ),
+            ),
+            rx.input(
+                placeholder="Telefone",
+                value=State.cliente_telefone,
+                on_change=lambda value: State.set_customer_field(
+                    "cliente_telefone", value
+                ),
+            ),
+            rx.input(
+                placeholder="E-mail",
+                value=State.cliente_email,
+                on_change=lambda value: State.set_customer_field("cliente_email", value),
+            ),
+            rx.cond(
+                State.cliente_id != "",
+                rx.vstack(
+                    rx.heading("Endereços", size="4"),
+                    rx.foreach(State.cliente_enderecos, customer_address_fields),
+                    rx.button(
+                        "Adicionar endereço",
+                        on_click=State.add_customer_address,
+                        class_name="secondary-button",
+                    ),
+                    width="100%",
+                    spacing="3",
+                ),
+                rx.fragment(),
+            ),
+            rx.hstack(
+                rx.cond(
+                    State.cliente_id != "",
+                    rx.button("Atualizar", on_click=State.update_customer),
+                    rx.button("Cadastrar", on_click=State.create_customer),
+                ),
+                rx.button(
+                    "Cancelar",
+                    on_click=State.close_customer_form,
+                    class_name="secondary-button",
+                ),
+                spacing="3",
+                wrap="wrap",
+            ),
+            feedback_message(),
+            id="cliente-form",
+            width="100%",
+            spacing="3",
+            class_name="form-modal-card",
+        ),
+        class_name="form-modal-backdrop",
     )
 
 
@@ -1990,8 +2357,31 @@ def address_section() -> rx.Component:
 def customers_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
+            rx.hstack(
+                rx.heading("Clientes", size="7", class_name="sales-page-title"),
+                rx.cond(
+                    State.is_gestor,
+                    rx.fragment(),
+                    rx.button(
+                        "Novo Cliente",
+                        on_click=State.open_customer_form,
+                        class_name="new-customer-button",
+                    ),
+                ),
+                justify="between",
+                align_items="center",
+                width="100%",
+            ),
             customer_list(),
-            rx.cond(State.is_gestor, rx.fragment(), customer_form()),
+            rx.cond(
+                State.is_gestor,
+                rx.fragment(),
+                rx.cond(
+                    State.cliente_form_aberto,
+                    customer_form(),
+                    rx.fragment(),
+                ),
+            ),
             feedback_message(),
             width="100%",
             spacing="4",
@@ -2384,31 +2774,43 @@ def account_page() -> rx.Component:
         rx.cond(
             State.is_gestor,
             rx.text(FORBIDDEN_MESSAGE),
-            rx.vstack(
-                page_header("Minha conta", "Atualize suas credenciais de acesso."),
-                rx.text("Usuário: ", State.login),
-                rx.input(
-                    placeholder="Novo login",
-                    value=State.novo_login,
-                    on_change=State.set_novo_login,
+            rx.box(
+                rx.vstack(
+                    page_header("Minha conta", "Atualize suas credenciais de acesso."),
+                    rx.text("Usuário: ", State.login),
+                    rx.input(
+                        placeholder="Novo login",
+                        value=State.novo_login,
+                        on_change=State.set_novo_login,
+                    ),
+                    rx.button("Salvar login", on_click=State.update_login),
+                    rx.input(
+                        placeholder="Senha atual",
+                        type="password",
+                        value=State.senha_atual,
+                        on_change=State.set_senha_atual,
+                    ),
+                    rx.input(
+                        placeholder="Nova senha",
+                        type="password",
+                        value=State.nova_senha,
+                        on_change=State.set_nova_senha,
+                    ),
+                    rx.hstack(
+                        rx.button("Salvar senha", on_click=State.update_password),
+                        rx.button(
+                            "Cancelar",
+                            on_click=State.cancel_account_form,
+                            class_name="secondary-button",
+                        ),
+                        spacing="3",
+                    ),
+                    feedback_message(),
+                    width="100%",
+                    spacing="3",
+                    class_name="form-modal-card",
                 ),
-                rx.button("Salvar login", on_click=State.update_login),
-                rx.input(
-                    placeholder="Senha atual",
-                    type="password",
-                    value=State.senha_atual,
-                    on_change=State.set_senha_atual,
-                ),
-                rx.input(
-                    placeholder="Nova senha",
-                    type="password",
-                    value=State.nova_senha,
-                    on_change=State.set_nova_senha,
-                ),
-                rx.button("Salvar senha", on_click=State.update_password),
-                feedback_message(),
-                class_name="content-card",
-                width="100%",
+                class_name="form-modal-backdrop",
             ),
         ),
     )
@@ -2640,7 +3042,7 @@ def sale_form() -> rx.Component:
     return rx.vstack(
         page_header("Novo atendimento", "Registre uma venda e acompanhe o estoque em tempo real."),
         rx.input(
-            placeholder="ID do produto",
+            placeholder="Código do produto",
             value=State.venda_produto_id,
             on_change=lambda value: State.set_sale_field("venda_produto_id", value),
         ),
@@ -2679,10 +3081,18 @@ def sale_form() -> rx.Component:
             value=State.venda_receita,
             on_change=lambda value: State.set_sale_field("venda_receita", value),
         ),
-        rx.button("Confirmar venda", on_click=State.create_sale),
+        rx.hstack(
+            rx.button("Confirmar venda", on_click=State.create_sale),
+            rx.button(
+                "Cancelar",
+                on_click=State.cancel_sale,
+                class_name="secondary-button",
+            ),
+            spacing="3",
+        ),
         width="100%",
-        class_name="content-card",
-        max_width="32rem",
+        class_name="content-card attendance-card",
+        max_width="25.25rem",
     )
 
 
@@ -2741,6 +3151,7 @@ def attendance_page() -> rx.Component:
                 sale_form(),
                 width="100%",
                 spacing="4",
+                class_name="attendance-backdrop",
             ),
         )
     )
@@ -3213,6 +3624,54 @@ GLOBAL_STYLE = {
         "box_shadow": "0 10px 30px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(120,230,215,0.1)",
         "overflow_x": "auto",
     },
+    ".attendance-backdrop": {
+        "position": "fixed",
+        "inset": "0",
+        "z_index": "30",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1rem",
+        "box_sizing": "border-box",
+        "background": "rgba(0,8,8,0.82)",
+        "backdrop_filter": "blur(5px)",
+    },
+    ".attendance-card": {
+        "width": "100%",
+        "max_width": "25.25rem",
+        "max_height": "calc(100vh - 2rem)",
+        "overflow_y": "auto",
+        "padding": "1.5rem 1.35rem 1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "box_sizing": "border-box",
+    },
+    ".attendance-card .page-title": {
+        "color": "#ffffff",
+        "font_size": "1.5rem",
+        "margin_bottom": "0.35rem",
+    },
+    ".attendance-card .page-description": {"display": "none"},
+    ".attendance-card input, .attendance-card .rt-TextFieldRoot, .attendance-card .rt-SelectTrigger": {
+        "min_height": "2.25rem",
+        "border": "none",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".attendance-card input, .attendance-card .rt-TextFieldRoot": {
+        "width": "100%",
+        "box_sizing": "border-box",
+    },
+    ".attendance-card input[placeholder*='ID do cliente'], .attendance-card input[placeholder*='Número da receita']": {
+        "font_size": "0.8rem",
+    },
+    ".attendance-card .rt-SelectTrigger": {"width": "100%"},
+    ".attendance-card button": {"padding": "0.45rem 0.9rem", "font_size": "0.9rem"},
     ".table-heading": {
         "color": "#8fb0ab",
         "font_size": "0.78rem",
@@ -3237,10 +3696,12 @@ GLOBAL_STYLE = {
     },
     ".sales-table-head, .sales-table-row": {
         "display": "grid",
-        "grid_template_columns": "0.75fr 0.65fr 1.05fr 1.65fr 0.85fr 0.9fr 0.8fr",
-        "gap": "1rem",
+        "grid_template_columns": "0.75fr 0.65fr 1.05fr 1.05fr 0.85fr 0.9fr 0.8fr",
+        "gap": "0.5rem",
         "align_items": "center",
-        "min_width": "68rem",
+        "width": "100%",
+        "min_width": "100%",
+        "box_sizing": "border-box",
     },
     ".sales-table-head": {
         "padding": "1rem 0 0.75rem",
@@ -3276,6 +3737,51 @@ GLOBAL_STYLE = {
     ".customers-card": {
         "padding": "1.25rem 1.75rem",
         "border_radius": "1.35rem",
+    },
+    ".form-modal-backdrop": {
+        "position": "fixed",
+        "inset": "0",
+        "z_index": "30",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1rem",
+        "box_sizing": "border-box",
+        "background": "rgba(0,8,8,0.82)",
+        "backdrop_filter": "blur(5px)",
+    },
+    ".form-modal-card": {
+        "width": "100%",
+        "max_width": "31.5rem",
+        "max_height": "calc(100vh - 2rem)",
+        "overflow_y": "auto",
+        "padding": "1.5rem 1.35rem 1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "box_sizing": "border-box",
+    },
+    ".form-modal-card h1, .form-modal-card h2, .form-modal-card h3": {
+        "color": "#ffffff",
+        "margin_bottom": "0.35rem",
+    },
+    ".form-modal-card input, .form-modal-card .rt-TextFieldRoot": {
+        "width": "100%",
+        "min_height": "2.25rem",
+        "border": "none",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+        "box_sizing": "border-box",
+    },
+    ".customer-address-fields": {
+        "padding": "0.75rem",
+        "border": "1px solid #17332f",
+        "border_radius": "0.75rem",
+        "background": "rgba(255,255,255,0.02)",
     },
     ".customers-page-title": {
         "color": "#ffffff",
@@ -3577,12 +4083,12 @@ GLOBAL_STYLE = {
     },
     ".customer-table-head, .customer-table-row": {
         "display": "grid",
-        "grid_template_columns": "1.35fr 1fr 1.1fr 1.4fr 1.35fr",
+        "grid_template_columns": "1.35fr 1fr 1.1fr 1.4fr 1.35fr 1.7fr",
         "gap": "1rem",
         "align_items": "center",
         "width": "100%",
         "box_sizing": "border-box",
-        "min_width": "48rem",
+        "min_width": "62rem",
     },
     ".customer-table-head": {
         "padding": "1rem 0 0.75rem",
@@ -3920,6 +4426,8 @@ GLOBAL_STYLE = {
         ".nav-tabs": {"width": "100%", "overflow_x": "auto", "padding_bottom": "0.2rem"},
         ".page-content": {"padding": "1rem 0.75rem"},
         ".content-card": {"padding": "1rem", "max_width": "100%"},
+        ".form-modal-card": {"padding": "1.25rem 1rem"},
+        ".sales-table-head, .sales-table-row": {"min_width": "60rem"},
         ".dashboard-stats": {"grid_template_columns": "repeat(2, minmax(0, 1fr))"},
     },
     "@media (max-width: 480px)": {

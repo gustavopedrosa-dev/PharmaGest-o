@@ -440,6 +440,21 @@ class XanoClient:
         )
         return self._address_from_payload(payload["endereco"])
 
+    def update_address(
+        self,
+        token: str,
+        customer_id: int,
+        address_id: int,
+        address: dict[str, Any],
+    ) -> Address:
+        payload = self._request(
+            "PATCH",
+            f"/api:n8EZtgGQ/clientes/cliente/{customer_id}/endereco/{address_id}",
+            token,
+            json=address,
+        )
+        return self._address_from_payload(payload["endereco"])
+
     def list_employees(self, token: str) -> list[Employee]:
         payload = self._request("GET", "/api:equipe/equipe/funcionarios", token)
         active_by_employee = {
