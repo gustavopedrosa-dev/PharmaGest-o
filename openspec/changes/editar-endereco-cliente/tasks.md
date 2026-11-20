@@ -8,7 +8,7 @@
 - [x] 2.1 Carregar todos os endereços ao abrir a edição do cliente e preencher uma lista editável mantendo os IDs; verificar cliente sem endereços e cliente com múltiplos endereços.
 - [x] 2.2 Adicionar linhas de endereço no formulário e validar cidade e estado obrigatórias antes do envio; verificar que os demais campos opcionais podem ficar vazios.
 - [x] 2.3 Salvar endereço existente via PATCH e endereço novo via POST, guardando cada ID retornado para evitar duplicação em nova tentativa; verificar mensagem e modal aberto em falha parcial.
-- [ ] 2.4 Renderizar os campos estruturados e ações para múltiplos endereços no modal, sem controle de remoção; compilar e validar o fluxo visual de edição.
+- [x] 2.4 Renderizar os campos estruturados e ações para múltiplos endereços no modal, sem controle de remoção; compilar e validar o fluxo visual de edição.
 
 ## 3. Verificação integrada
 
