@@ -397,7 +397,12 @@ class State(rx.State):
         self._set_session(session)
         self.senha_input = ""
         self.senha_visivel = False
-        return rx.redirect("/dashboard")
+        destination = (
+            "/dashboard"
+            if self.perfil_acesso == "gestor"
+            else "/vendas"
+        )
+        return rx.redirect(destination)
 
     @rx.event
     def load_session(self) -> rx.event.EventSpec | None:
@@ -2256,11 +2261,7 @@ def customer_form() -> rx.Component:
             rx.vstack(
                 rx.heading("Endereços", size="4"),
                 rx.foreach(State.cliente_enderecos, customer_address_fields),
-                rx.button(
-                    "Adicionar endereço",
-                    on_click=State.add_customer_address,
-                    class_name="secondary-button",
-                ),
+                rx.button("Adicionar endereço", on_click=State.add_customer_address, class_name="secondary-button"),
                 width="100%",
                 spacing="3",
             ),
@@ -3030,7 +3031,7 @@ def stock_page() -> rx.Component:
                         class_name=rx.cond(
                             product["situacao"] == "repor",
                             "stock-table-cell stock-critical",
-                            "stock-table-cell stock-value",
+                            "stock-table-cell",
                         ),
                     ),
                     rx.text(product["minimo"], class_name="stock-table-cell"),
@@ -5943,4 +5944,62 @@ GLOBAL_STYLE = {
         "justify_self": "center",
         "text_align": "center",
     },
-   
+}
+
+app = rx.App(style=GLOBAL_STYLE)
+app.add_page(login_page, route="/", title="FarmaGestão")
+app.add_page(login_page, route="/login", title="Entrar | FarmaGestão")
+app.add_page(
+    dashboard_page,
+    route="/dashboard",
+    title="Visão geral | FarmaGestão",
+    on_load=State.load_dashboard,
+)
+app.add_page(
+    sales_page,
+    route="/vendas",
+    title="Vendas | FarmaGestão",
+    on_load=State.load_sales,
+)
+app.add_page(
+    stock_page,
+    route="/estoque",
+    title="Estoque | FarmaGestão",
+    on_load=State.load_products,
+)
+app.add_page(
+    products_page,
+    route="/produtos",
+    title="Produtos | FarmaGestão",
+    on_load=State.load_products,
+)
+app.add_page(
+    customers_page,
+    route="/clientes",
+    title="Clientes | FarmaGestão",
+    on_load=State.load_customers,
+)
+app.add_page(
+    employees_page,
+    route="/equipe",
+    title="Equipe | FarmaGestão",
+    on_load=State.load_employees,
+)
+app.add_page(
+    suppliers_page,
+    route="/fornecedores",
+    title="Fornecedores | FarmaGestão",
+    on_load=State.load_suppliers,
+)
+app.add_page(
+    account_page,
+    route="/minha-conta",
+    title="Minha conta | FarmaGestão",
+    on_load=State.load_session,
+)
+app.add_page(
+    attendance_page,
+    route="/atendimento",
+    title="Atendimento | FarmaGestão",
+    on_load=State.load_products,
+)
