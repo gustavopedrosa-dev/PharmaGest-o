@@ -1767,9 +1767,13 @@ def feedback_message() -> rx.Component:
     )
 
 
-def page_header(title: str, description: str = "") -> rx.Component:
+def page_header(
+    title: str,
+    description: str = "",
+    title_class_name: str = "page-title",
+) -> rx.Component:
     return rx.vstack(
-        rx.heading(title, size="7", class_name="page-title"),
+        rx.heading(title, size="7", class_name=title_class_name),
         rx.cond(
             description != "",
             rx.text(description, class_name="page-description"),
@@ -1822,9 +1826,13 @@ def feature_pill(label: str, tone: str) -> rx.Component:
     )
 
 
-def section_heading(title: str, description: str = "") -> rx.Component:
+def section_heading(
+    title: str,
+    description: str = "",
+    heading_class_name: str = "",
+) -> rx.Component:
     return rx.vstack(
-        rx.heading(title, size="5"),
+        rx.heading(title, size="5", class_name=heading_class_name),
         rx.cond(
             description != "",
             rx.text(description, class_name="muted"),
@@ -2609,7 +2617,11 @@ def employees_page() -> rx.Component:
 
 def supplier_list() -> rx.Component:
     return rx.vstack(
-        section_heading("Fornecedores", "Parceiros cadastrados e prazo de entrega."),
+        section_heading(
+            "Fornecedores",
+            "Parceiros cadastrados e prazo de entrega.",
+            "supplier-section-heading",
+        ),
         rx.box(
             rx.text("Fornecedor", class_name="supplier-table-heading"),
             rx.text("CNPJ", class_name="supplier-table-heading"),
@@ -2629,7 +2641,7 @@ def supplier_list() -> rx.Component:
                     rx.button(
                         "Editar",
                         on_click=lambda: State.edit_supplier(supplier["id"]),
-                        class_name="secondary-button supplier-action-button",
+                        class_name="employee-edit-button",
                     ),
                     rx.button(
                         "Remover",
@@ -2768,6 +2780,7 @@ def suppliers_page() -> rx.Component:
                     page_header(
                         "Fornecedores",
                         "Consulte os fornecedores cadastrados.",
+                        "page-title supplier-page-title",
                     ),
                     rx.button(
                         "Adicionar fornecedor",
@@ -3639,6 +3652,7 @@ GLOBAL_STYLE = {
         "padding": "clamp(1rem, 4vw, 2rem)",
     },
     ".page-title": {"color": "#0a4e3d", "margin_bottom": "0.15rem"},
+    ".supplier-page-title": {"color": "#48b6b8"},
     ".dashboard-page": {
         "padding_top": "1rem",
     },
@@ -4157,6 +4171,12 @@ GLOBAL_STYLE = {
         "color": "#8fb0ab",
         "font_size": "0.75rem",
         "font_weight": "700",
+    },
+    ".supplier-table-head > :nth-child(-n+3), .supplier-table-row > :nth-child(-n+3)": {
+        "text_align": "center",
+    },
+    ".supplier-section-heading": {
+        "color": "#ffffff",
     },
     ".supplier-deadline": {
         "color": "#e3e4d4",
