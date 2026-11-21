@@ -404,12 +404,18 @@ class State(rx.State):
         )
         return rx.redirect(destination)
 
-    @rx.event
-    def load_session(self) -> rx.event.EventSpec | None:
+    def _redirect_if_missing_token(self) -> rx.event.EventSpec | None:
         if not self._token:
             self.session_ready = True
             self.authenticated = False
             return rx.redirect("/login")
+        return None
+
+    @rx.event
+    def load_session(self) -> rx.event.EventSpec | None:
+        redirect = self._redirect_if_missing_token()
+        if redirect is not None:
+            return redirect
         try:
             self._set_session(XanoClient().session(self._token))
         except XanoUnauthorizedError:
@@ -424,7 +430,7 @@ class State(rx.State):
 
     @rx.event
     def load_dashboard(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         if self.perfil_acesso != "gestor":
@@ -437,11 +443,12 @@ class State(rx.State):
             agora = datetime.now().astimezone()
             data_inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
             data_fim = data_inicio + timedelta(days=1)
-            summary = XanoClient().dashboard_summary(
-                self._token,
-                data_inicio=data_inicio,
-                data_fim=data_fim,
-            )
+            with XanoClient() as client:
+                summary = client.dashboard_summary(
+                    self._token,
+                    data_inicio=data_inicio,
+                    data_fim=data_fim,
+                )
             self.dashboard_total_vendas = int(summary.get("total_vendas", 0) or 0)
             self.dashboard_valor_total = float(summary.get("valor_total", 0) or 0)
             self.dashboard_funcionarios_ativos = int(
@@ -517,17 +524,17 @@ class State(rx.State):
 
     @rx.event
     def load_products(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         try:
-            client = XanoClient()
-            self._set_products(client.list_products(self._token))
-            self._set_categories(client.list_categories(self._token))
-            if self.is_gestor:
-                self._set_suppliers(client.list_suppliers(self._token))
-            else:
-                self._clear_suppliers()
+            with XanoClient() as client:
+                self._set_products(client.list_products(self._token))
+                self._set_categories(client.list_categories(self._token))
+                if self.is_gestor:
+                    self._set_suppliers(client.list_suppliers(self._token))
+                else:
+                    self._clear_suppliers()
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -541,14 +548,15 @@ class State(rx.State):
 
     @rx.event
     def load_suppliers(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return rx.redirect("/minha-conta")
         try:
-            self._set_suppliers(XanoClient().list_suppliers(self._token))
+            with XanoClient() as client:
+                self._set_suppliers(client.list_suppliers(self._token))
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -562,11 +570,12 @@ class State(rx.State):
 
     @rx.event
     def load_customers(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         try:
-            self._set_customers(XanoClient().list_customers(self._token))
+            with XanoClient() as client:
+                self._set_customers(client.list_customers(self._token))
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -654,14 +663,15 @@ class State(rx.State):
 
     @rx.event
     def load_employees(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return rx.redirect("/minha-conta")
         try:
-            self._set_employees(XanoClient().list_employees(self._token))
+            with XanoClient() as client:
+                self._set_employees(client.list_employees(self._token))
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -1052,16 +1062,19 @@ class State(rx.State):
 
     @rx.event
     def load_sales(self) -> rx.event.EventSpec | None:
-        redirect = self.load_session()
+        redirect = self._redirect_if_missing_token()
         if redirect is not None:
             return redirect
         try:
-            client = XanoClient()
-            sales, payments = client.list_sale_history(
-                self._token,
-                is_gestor=self.is_gestor,
-            )
-            orders, items = client.list_orders(self._token, is_gestor=self.is_gestor)
+            with XanoClient() as client:
+                sales, payments = client.list_sale_history(
+                    self._token,
+                    is_gestor=self.is_gestor,
+                )
+                orders, items = client.list_orders(
+                    self._token,
+                    is_gestor=self.is_gestor,
+                )
             orders_by_id = {order.id: order for order in orders}
             items_by_order: dict[int, list[str]] = {}
             for item in items:

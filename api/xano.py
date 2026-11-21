@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 from urllib.parse import urlparse
 
@@ -190,6 +191,30 @@ class XanoClient:
         self.base_url = configured_url.rstrip("/")
         self.timeout = timeout
         self._transport = transport
+        self._http_client: httpx.Client | None = None
+
+    def _new_http_client(self) -> httpx.Client:
+        return httpx.Client(
+            base_url=self.base_url,
+            timeout=self.timeout,
+            transport=self._transport,
+        )
+
+    def __enter__(self) -> XanoClient:
+        if self._http_client is not None:
+            raise RuntimeError("XanoClient já está aberto.")
+        self._http_client = self._new_http_client()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        client, self._http_client = self._http_client, None
+        if client is not None:
+            client.close()
 
     def _request(
         self,
@@ -202,12 +227,21 @@ class XanoClient:
         if token:
             headers["Authorization"] = "Bearer " + token
         try:
-            with httpx.Client(
-                base_url=self.base_url,
-                timeout=self.timeout,
-                transport=self._transport,
-            ) as client:
-                response = client.request(method, path, headers=headers, **kwargs)
+            if self._http_client is not None:
+                response = self._http_client.request(
+                    method,
+                    path,
+                    headers=headers,
+                    **kwargs,
+                )
+            else:
+                with self._new_http_client() as client:
+                    response = client.request(
+                        method,
+                        path,
+                        headers=headers,
+                        **kwargs,
+                    )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise XanoUnavailableError(UNAVAILABLE_MESSAGE) from exc
 
