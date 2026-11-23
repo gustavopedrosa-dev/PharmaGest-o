@@ -11,6 +11,7 @@ query "equipe/funcionario/{id}" verb=PATCH {
     email? email
     text? cargo filters=trim
     decimal? salario
+    text? endereco filters=trim
   }
 
   stack {
@@ -56,7 +57,8 @@ query "equipe/funcionario/{id}" verb=PATCH {
         telefone: $input.telefone,
         email: $input.email,
         cargo: $input.cargo,
-        salario: $input.salario
+        salario: $input.salario,
+        endereco: $input.endereco
       }
     } as $funcionario
   }

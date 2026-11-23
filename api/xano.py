@@ -134,6 +134,7 @@ class Employee:
     salario: float | None
     data_admissao: str
     ativo: bool = True
+    endereco: str = ""
 
 
 @dataclass(frozen=True)
@@ -550,6 +551,17 @@ class XanoClient:
             active=payload.get("ativo", False),
         )
 
+    def activate_employee(self, token: str, employee_id: int) -> Employee:
+        payload = self._request(
+            "POST",
+            f"/api:equipe/equipe/funcionario/{employee_id}/ativar",
+            token,
+        )
+        return self._employee_from_payload(
+            payload["funcionario"],
+            active=payload.get("ativo", True),
+        )
+
     def create_order(
         self,
         token: str,
@@ -750,6 +762,7 @@ class XanoClient:
             salario=float(salario) if salario is not None else None,
             data_admissao=str(payload.get("data_admissao") or ""),
             ativo=bool(payload.get("ativo", True) if active is None else active),
+            endereco=str(payload.get("endereco") or ""),
         )
 
     @staticmethod

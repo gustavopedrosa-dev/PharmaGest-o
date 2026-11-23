@@ -115,12 +115,14 @@ class State(rx.State):
     fornecedores: list[dict[str, str]] = []
     dashboard_total_vendas: int = 0
     dashboard_valor_total: float = 0.0
+    dashboard_itens_vendidos: int = 0
     dashboard_funcionarios_ativos: int = 0
     dashboard_estoque_critico: list[dict[str, object]] = []
     dashboard_mais_vendidos: list[dict[str, object]] = []
     dashboard_carregado: bool = False
     acesso_inicial: dict[str, str] = {}
     confirmando_inativacao: bool = False
+    funcionario_ativo: bool = True
     confirmando_remocao_fornecedor: bool = False
     produto_id: str = ""
     categoria_id: str = ""
@@ -170,6 +172,8 @@ class State(rx.State):
     funcionario_cargo: str = ""
     funcionario_salario: str = ""
     funcionario_login: str = ""
+    funcionario_senha_inicial: str = ""
+    funcionario_senha_inicial_visivel: bool = False
     funcionario_modal_aberto: bool = False
     funcionario_editando: bool = False
     fornecedor_id: str = ""
@@ -185,6 +189,45 @@ class State(rx.State):
     @rx.var
     def is_gestor(self) -> bool:
         return self.perfil_acesso == "gestor"
+
+    @rx.var
+    def feedback_is_error(self) -> bool:
+        if not self.mensagem:
+            return False
+        success_prefixes = (
+            "Venda confirmada.",
+            "Cliente cadastrado.",
+            "Cliente atualizado.",
+            "Cliente removido.",
+            "Cliente inativado.",
+            "Produto cadastrado.",
+            "Produto atualizado.",
+            "Produto removido.",
+            "Produto inativado.",
+            "Categoria cadastrada.",
+            "Categoria atualizada.",
+            "Categoria inativada.",
+            "Funcionário cadastrado.",
+            "Funcionário atualizado.",
+            "Funcionário inativado.",
+            "Funcionário ativado.",
+            "Funcionário reativado.",
+            "Fornecedor cadastrado.",
+            "Fornecedor atualizado.",
+            "Fornecedor removido.",
+            "Fornecedor inativado.",
+            "Login atualizado.",
+            "Senha atualizada.",
+            "Endere",
+        )
+        return not any(
+            self.mensagem.startswith(prefix)
+            for prefix in success_prefixes
+        )
+
+    @rx.var
+    def dashboard_valor_total_brl(self) -> str:
+        return f"R$ {self.dashboard_valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     @rx.event
     def set_login_input(self, value: str) -> None:
@@ -245,6 +288,8 @@ class State(rx.State):
     @rx.event
     def open_new_product(self) -> None:
         self._clear_product_form()
+        if self.fornecedores:
+            self.produto_fornecedor_id = self.fornecedores[0]["id"]
         self.produto_editando = False
         self.produto_modal_aberto = True
 
@@ -254,11 +299,11 @@ class State(rx.State):
         self.produto_editando = False
 
     @rx.event
-    def save_product(self) -> None:
+    def save_product(self) -> rx.event.EventSpec | None:
         if self.produto_editando:
-            self.update_product()
+            return self.update_product()
         else:
-            self.create_product()
+            return self.create_product()
 
     def set_product_id(self, value: str) -> None:
         self.produto_id = value
@@ -273,21 +318,47 @@ class State(rx.State):
     def toggle_category_form(self) -> None:
         self.categoria_form_aberta = not self.categoria_form_aberta
 
+    @rx.event
     def set_sale_field(self, field: str, value: str) -> None:
         setattr(self, field, value)
 
+    @rx.event
     def set_customer_field(self, field: str, value: str) -> None:
+        if field == "cliente_cpf":
+            digits = "".join(character for character in value if character.isdigit())
+            setattr(self, field, digits[:11])
+            return
         setattr(self, field, value)
 
+    @rx.event
     def set_address_field(self, field: str, value: str) -> None:
         setattr(self, field, value)
 
+    @rx.event
     def set_employee_field(self, field: str, value: str) -> None:
+        if field == "funcionario_cpf":
+            digits = "".join(character for character in value if character.isdigit())
+            setattr(self, field, digits[:11])
+            return
         setattr(self, field, value)
+
+    @rx.event
+    def set_initial_employee_password(self, value: str) -> None:
+        self.funcionario_senha_inicial = value
+
+    @rx.event
+    def toggle_initial_employee_password(self) -> None:
+        self.funcionario_senha_inicial_visivel = (
+            not self.funcionario_senha_inicial_visivel
+        )
 
     @rx.event
     def open_new_employee(self) -> None:
         self._clear_employee_form()
+        self.acesso_inicial = {}
+        self.funcionario_endereco = ""
+        self.funcionario_senha_inicial = ""
+        self.funcionario_senha_inicial_visivel = False
         self.funcionario_cargo = "colaborador"
         self.funcionario_editando = False
         self.funcionario_modal_aberto = True
@@ -306,7 +377,7 @@ class State(rx.State):
         self.funcionario_cpf = employee["cpf"]
         self.funcionario_telefone = employee["telefone"]
         self.funcionario_email = employee["email"]
-        self.funcionario_endereco = ""
+        self.funcionario_endereco = employee["endereco"]
         self.funcionario_cargo = employee["cargo"]
         self.funcionario_salario = employee["salario"].replace("R$ ", "")
         self.funcionario_editando = True
@@ -316,6 +387,9 @@ class State(rx.State):
     def close_employee_modal(self) -> None:
         self.funcionario_modal_aberto = False
         self.funcionario_editando = False
+        self.acesso_inicial = {}
+        self.funcionario_senha_inicial = ""
+        self.funcionario_senha_inicial_visivel = False
 
     @rx.event
     def save_employee(self) -> None:
@@ -324,7 +398,37 @@ class State(rx.State):
                 self.funcionario_nome.strip().lower().replace(" ", ".")
             )
         if self.funcionario_editando:
-            self.update_employee()
+            if not self._valid_employee_cpf():
+                return
+            if not self._valid_employee_update_cpf():
+                return
+            try:
+                employee_id = int(self.funcionario_id)
+                employee = XanoClient().update_employee(
+                    self._token,
+                    employee_id,
+                    self._employee_payload(include_login=False),
+                )
+                employee_view = self._employee_view(employee)
+                employee_view["endereco"] = self.funcionario_endereco or ""
+                self.funcionarios = [
+                    employee_view
+                    if item["id"] == str(employee_id)
+                    else item
+                    for item in self.funcionarios
+                ]
+                self.mensagem = "Funcionário atualizado."
+                self.close_employee_modal()
+            except ValueError:
+                self.mensagem = "Informe um ID e salário válidos."
+            except XanoUnauthorizedError:
+                self._expire_session()
+            except XanoForbiddenError:
+                self.mensagem = FORBIDDEN_MESSAGE
+            except XanoUnavailableError:
+                self.mensagem = UNAVAILABLE_MESSAGE
+            except XanoError as exc:
+                self.mensagem = exc.message
         else:
             self.create_employee()
 
@@ -337,6 +441,7 @@ class State(rx.State):
         )
         if employee is not None:
             self.funcionario_nome = employee["nome"]
+            self.funcionario_ativo = employee["situacao"] == "ativo"
         self.request_deactivate_employee()
 
     def set_supplier_field(self, field: str, value: str) -> None:
@@ -451,6 +556,13 @@ class State(rx.State):
                 )
             self.dashboard_total_vendas = int(summary.get("total_vendas", 0) or 0)
             self.dashboard_valor_total = float(summary.get("valor_total", 0) or 0)
+            itens_vendidos = summary.get("itens_vendidos")
+            if itens_vendidos is None:
+                itens_vendidos = sum(
+                    int(item.get("quantidade", 0) or 0)
+                    for item in summary.get("mais_vendidos", [])
+                )
+            self.dashboard_itens_vendidos = int(itens_vendidos or 0)
             self.dashboard_funcionarios_ativos = int(
                 summary.get("funcionarios_ativos", 0) or 0
             )
@@ -575,7 +687,17 @@ class State(rx.State):
             return redirect
         try:
             with XanoClient() as client:
-                self._set_customers(client.list_customers(self._token))
+                customers = client.list_customers(self._token)
+                addresses_by_customer: dict[str, str] = {}
+                for customer in customers:
+                    if not customer.ativo:
+                        continue
+                    addresses = client.list_addresses(self._token, customer.id)
+                    if addresses:
+                        addresses_by_customer[str(customer.id)] = (
+                            self._format_customer_address(addresses[0])
+                        )
+                self._set_customers(customers, addresses_by_customer)
         except XanoUnauthorizedError:
             self._expire_session()
             return rx.redirect("/login")
@@ -688,16 +810,30 @@ class State(rx.State):
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self._valid_employee_cpf():
+            return
+        cpf_digitado = "".join(
+            character for character in self.funcionario_cpf if character.isdigit()
+        )
+        if any(
+            "".join(character for character in item["cpf"] if character.isdigit())
+            == cpf_digitado
+            for item in self.funcionarios
+        ):
+            self.mensagem = "O CPF já está cadastrado."
+            return
         try:
             employee, access = XanoClient().create_employee(
                 self._token,
                 self._employee_payload(include_login=True),
             )
-            self.funcionarios = [*self.funcionarios, self._employee_view(employee)]
+            employee_view = self._employee_view(employee)
+            employee_view["endereco"] = self.funcionario_endereco or ""
+            self.funcionarios = [*self.funcionarios, employee_view]
             self.acesso_inicial = access
+            self.funcionario_login = access["login"]
+            self.funcionario_senha_inicial = access["senha_inicial"]
             self.mensagem = "Funcionário cadastrado. Guarde a senha inicial exibida."
-            self.close_employee_modal()
-            self._clear_employee_form()
         except ValueError:
             self.mensagem = "Preencha salário e campos numéricos com valores válidos."
         except XanoUnauthorizedError:
@@ -714,6 +850,10 @@ class State(rx.State):
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self._valid_employee_cpf():
+            return
+        if not self._valid_employee_update_cpf():
+            return
         try:
             employee_id = int(self.funcionario_id)
             employee = XanoClient().update_employee(
@@ -721,8 +861,10 @@ class State(rx.State):
                 employee_id,
                 self._employee_payload(include_login=False),
             )
+            employee_view = self._employee_view(employee)
+            employee_view["endereco"] = self.funcionario_endereco or ""
             self.funcionarios = [
-                self._employee_view(employee)
+                employee_view
                 if item["id"] == str(employee_id)
                 else item
                 for item in self.funcionarios
@@ -747,14 +889,36 @@ class State(rx.State):
             return
         try:
             employee_id = int(self.funcionario_id)
-            employee = XanoClient().deactivate_employee(self._token, employee_id)
-            self.funcionarios = [
-                self._employee_view(employee)
-                if item["id"] == str(employee_id)
-                else item
-                for item in self.funcionarios
-            ]
-            self.mensagem = "Funcionário inativado."
+            client = XanoClient()
+            was_active = self.funcionario_ativo
+            employee = (
+                client.deactivate_employee(self._token, employee_id)
+                if was_active
+                else client.activate_employee(self._token, employee_id)
+            )
+            updated_view = self._employee_view(employee)
+            updated_view["situacao"] = "inativo" if was_active else "ativo"
+            updated_rows = []
+            for item in self.funcionarios:
+                if item["id"] == str(employee_id):
+                    updated_view["endereco"] = (
+                        employee.endereco or item.get("endereco", "")
+                    )
+                    updated_view["email"] = employee.email or item.get("email", "")
+                    updated_view["telefone"] = (
+                        employee.telefone or item.get("telefone", "")
+                    )
+                    updated_view["nome"] = employee.nome or item.get("nome", "")
+                    updated_rows.append(updated_view)
+                else:
+                    updated_rows.append(item)
+            self.funcionarios = updated_rows
+            self.funcionario_ativo = not was_active
+            self.mensagem = (
+                "Funcionário inativado."
+                if was_active
+                else "Funcionário reativado."
+            )
             self.confirmando_inativacao = False
         except ValueError:
             self.mensagem = "Informe um ID de funcionário válido."
@@ -788,6 +952,8 @@ class State(rx.State):
         if self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self._valid_customer_cpf():
+            return
         address_payloads = self._customer_address_payloads()
         if address_payloads is None:
             return
@@ -796,12 +962,20 @@ class State(rx.State):
                 self._token,
                 self._customer_payload(),
             )
-            self.clientes = [*self.clientes, self._customer_view(customer)]
             self.cliente_id = str(customer.id)
             if not self._save_customer_addresses(customer.id):
                 if not self.authenticated:
                     return
                 return
+            customer_view = self._customer_view(customer)
+            customer_view["endereco"] = (
+                self._format_customer_address_from_form(
+                    self.cliente_enderecos[0]
+                )
+                if self.cliente_enderecos
+                else "—"
+            )
+            self.clientes = [*self.clientes, customer_view]
             self.mensagem = "Cliente cadastrado."
             self.cliente_form_aberto = False
         except ValueError:
@@ -820,6 +994,8 @@ class State(rx.State):
         if self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        if not self._valid_customer_cpf():
+            return None
         address_payloads = self._customer_address_payloads()
         if address_payloads is None:
             return
@@ -830,8 +1006,16 @@ class State(rx.State):
                 customer_id,
                 self._customer_payload(),
             )
+            customer_view = self._customer_view(customer)
+            customer_view["endereco"] = (
+                self._format_customer_address_from_form(
+                    self.cliente_enderecos[0]
+                )
+                if self.cliente_enderecos
+                else "—"
+            )
             self.clientes = [
-                self._customer_view(customer)
+                customer_view
                 if item["id"] == str(customer_id)
                 else item
                 for item in self.clientes
@@ -1075,11 +1259,26 @@ class State(rx.State):
                     self._token,
                     is_gestor=self.is_gestor,
                 )
+                products = client.list_products(self._token)
+                customers = (
+                    client.list_customers(self._token)
+                    if self.is_gestor
+                    else []
+                )
+                employees = (
+                    client.list_employees(self._token)
+                    if self.is_gestor
+                    else []
+                )
             orders_by_id = {order.id: order for order in orders}
+            products_by_id = {product.id: product.nome for product in products}
+            customers_by_id = {customer.id: customer.nome for customer in customers}
+            employees_by_id = {employee.id: employee.nome for employee in employees}
             items_by_order: dict[int, list[str]] = {}
             for item in items:
                 items_by_order.setdefault(int(item["id_pedido"]), []).append(
-                    f'{item["quantidade"]}x Produto {item["id_produto"]}'
+                    f'{item["quantidade"]}x '
+                    f'{products_by_id.get(int(item["id_produto"]), f"Produto {item["id_produto"]}")}'
                 )
             payments_by_sale = {
                 int(payment["id_venda"]): str(payment.get("forma_pagamento") or "")
@@ -1093,10 +1292,15 @@ class State(rx.State):
                     "status": sale.status,
                     "data": self._format_sale_date(sale.data_venda),
                     "cliente": str(
-                        orders_by_id.get(sale.id_pedido).id_cliente
-                        or "balcão"
+                        customers_by_id.get(
+                            int(orders_by_id[sale.id_pedido].id_cliente),
+                            "balcão",
+                        )
                     )
-                    if sale.id_pedido in orders_by_id
+                    if (
+                        sale.id_pedido in orders_by_id
+                        and orders_by_id[sale.id_pedido].id_cliente is not None
+                    )
                     else "balcão",
                     "produtos": ", ".join(
                         items_by_order.get(sale.id_pedido, [])
@@ -1105,7 +1309,12 @@ class State(rx.State):
                     "canal": orders_by_id.get(sale.id_pedido).canal
                     if sale.id_pedido in orders_by_id
                     else "",
-                    "atendente": str(orders_by_id.get(sale.id_pedido).id_funcionario)
+                    "atendente": str(
+                        employees_by_id.get(
+                            int(orders_by_id[sale.id_pedido].id_funcionario),
+                            f"Funcionário {orders_by_id[sale.id_pedido].id_funcionario}",
+                        )
+                    )
                     if sale.id_pedido in orders_by_id
                     else "",
                     "pagamento": payments_by_sale.get(sale.id, ""),
@@ -1203,7 +1412,7 @@ class State(rx.State):
         self.deactivate_product()
 
     @rx.event
-    def update_product(self) -> None:
+    def update_product(self) -> rx.event.EventSpec | None:
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
@@ -1485,11 +1694,65 @@ class State(rx.State):
     def _customer_payload(self) -> dict[str, object]:
         return {
             "nome": self.cliente_nome,
-            "cpf": self.cliente_cpf or None,
+            "cpf": "".join(character for character in self.cliente_cpf if character.isdigit()) or None,
             "data_nascimento": self.cliente_data_nascimento,
             "telefone": self.cliente_telefone or None,
             "email": self.cliente_email or None,
         }
+
+    def _valid_customer_cpf(self) -> bool:
+        cpf = "".join(character for character in self.cliente_cpf if character.isdigit())
+        if not cpf:
+            return True
+        if not self._is_valid_cpf(cpf):
+            self.mensagem = "Informe um CPF válido com 11 dígitos."
+            return False
+        self.cliente_cpf = cpf
+        return True
+
+    @staticmethod
+    def _is_valid_cpf(cpf: str) -> bool:
+        cpf = "".join(character for character in cpf if character.isdigit())
+        if len(cpf) != 11 or len(set(cpf)) == 1:
+            return False
+
+        for digit_index in (9, 10):
+            total = sum(
+                int(cpf[index]) * (digit_index + 1 - index)
+                for index in range(digit_index)
+            )
+            remainder = (total * 10) % 11
+            expected_digit = 0 if remainder == 10 else remainder
+            if int(cpf[digit_index]) != expected_digit:
+                return False
+        return True
+
+    def _valid_employee_cpf(self) -> bool:
+        cpf = "".join(
+            character for character in self.funcionario_cpf if character.isdigit()
+        )
+        if not cpf or not self._is_valid_cpf(cpf):
+            self.mensagem = "Informe um CPF válido com 11 dígitos."
+            return False
+        self.funcionario_cpf = cpf
+        return True
+
+    def _valid_employee_update_cpf(self) -> bool:
+        cpf_digitado = "".join(
+            character for character in self.funcionario_cpf if character.isdigit()
+        )
+        employee_id = str(self.funcionario_id)
+        if any(
+            item["id"] != employee_id
+            and "".join(
+                character for character in item["cpf"] if character.isdigit()
+            )
+            == cpf_digitado
+            for item in self.funcionarios
+        ):
+            self.mensagem = "O CPF já está cadastrado."
+            return False
+        return True
 
     def _customer_address_payload(
         self,
@@ -1519,12 +1782,16 @@ class State(rx.State):
             "telefone": self.funcionario_telefone or None,
             "email": self.funcionario_email or None,
             "cargo": self.funcionario_cargo or None,
+            "endereco": self.funcionario_endereco or None,
             "salario": float(self.funcionario_salario)
             if self.funcionario_salario.strip()
             else None,
         }
         if include_login:
             payload["login"] = self.funcionario_login
+            payload["senha_inicial"] = (
+                self.funcionario_senha_inicial.strip() or None
+            )
         return payload
 
     def _clear_employee_form(self) -> None:
@@ -1534,9 +1801,11 @@ class State(rx.State):
         self.funcionario_data_nascimento = ""
         self.funcionario_telefone = ""
         self.funcionario_email = ""
+        self.funcionario_endereco = ""
         self.funcionario_cargo = ""
         self.funcionario_salario = ""
         self.funcionario_login = ""
+        self.funcionario_senha_inicial = ""
 
     def _clear_product_form(self) -> None:
         self.produto_id = ""
@@ -1569,9 +1838,17 @@ class State(rx.State):
             for product in self.produtos
         ]
 
-    def _set_customers(self, customers: list[Customer]) -> None:
+    def _set_customers(
+        self,
+        customers: list[Customer],
+        addresses_by_customer: dict[str, str] | None = None,
+    ) -> None:
+        addresses_by_customer = addresses_by_customer or {}
         self.clientes = [
-            self._customer_view(customer)
+            {
+                **self._customer_view(customer),
+                "endereco": addresses_by_customer.get(str(customer.id), "—"),
+            }
             for customer in customers
             if self.is_gestor or customer.ativo
         ]
@@ -1595,6 +1872,7 @@ class State(rx.State):
             "email": customer.email,
             "nascimento": customer.data_nascimento,
             "situacao": "ativo" if customer.ativo else "inativo",
+            "endereco": "—",
         }
 
     @staticmethod
@@ -1610,6 +1888,28 @@ class State(rx.State):
             "cep": address.cep,
             "complemento": address.complemento,
         }
+
+    @staticmethod
+    def _format_customer_address(address: Address) -> str:
+        parts = [
+            address.logradouro,
+            address.numero,
+            address.bairro,
+            address.cidade,
+            address.estado,
+        ]
+        return ", ".join(part for part in parts if part)
+
+    @staticmethod
+    def _format_customer_address_from_form(address: dict[str, str]) -> str:
+        parts = [
+            address.get("logradouro", ""),
+            address.get("numero", ""),
+            address.get("bairro", ""),
+            address.get("cidade", ""),
+            address.get("estado", ""),
+        ]
+        return ", ".join(part for part in parts if part) or "—"
 
     @staticmethod
     def _customer_address_form_view(
@@ -1635,6 +1935,7 @@ class State(rx.State):
                 else ""
             ),
             "email": employee.email,
+            "endereco": employee.endereco,
             "usuario": employee.email or "—",
             "situacao": "ativo" if employee.ativo else "inativo",
         }
@@ -1674,10 +1975,22 @@ class State(rx.State):
 
     @staticmethod
     def _format_sale_date(value: str) -> str:
+        value = str(value).strip()
+        if not value:
+            return ""
         try:
-            sale_date = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return value
+            numeric_timestamp = float(value)
+            timestamp_seconds = (
+                numeric_timestamp / 1000
+                if abs(numeric_timestamp) >= 100000000000
+                else numeric_timestamp
+            )
+            sale_date = datetime.fromtimestamp(timestamp_seconds).astimezone()
+        except (ValueError, TypeError, OverflowError, OSError):
+            try:
+                sale_date = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return value
         if sale_date.date() == datetime.now().date():
             return "Hoje"
         return sale_date.strftime("%d/%m")
@@ -1696,6 +2009,7 @@ class State(rx.State):
     def _clear_dashboard(self) -> None:
         self.dashboard_total_vendas = 0
         self.dashboard_valor_total = 0.0
+        self.dashboard_itens_vendidos = 0
         self.dashboard_funcionarios_ativos = 0
         self.dashboard_estoque_critico = []
         self.dashboard_mais_vendidos = []
@@ -1762,7 +2076,15 @@ def login_role_card(label: str, role: str, icon: str) -> rx.Component:
 def feedback_message() -> rx.Component:
     return rx.cond(
         State.mensagem != "",
-        rx.box(rx.text(State.mensagem), class_name="feedback feedback-error"),
+        rx.box(
+            rx.text(State.mensagem),
+            key=State.mensagem,
+            class_name=rx.cond(
+                State.feedback_is_error,
+                "feedback feedback-error",
+                "feedback feedback-success",
+            ),
+        ),
         rx.fragment(),
     )
 
@@ -2029,20 +2351,13 @@ def dashboard_page() -> rx.Component:
                         rx.hstack(
                             rx.box(
                                 rx.vstack(
-                                    rx.text("Faturamento hoje", class_name="muted"),
                                     rx.text(
-                                        f"R$ {State.dashboard_valor_total:.2f}",
+                                        State.dashboard_valor_total_brl,
                                         class_name="stat-card-number",
                                     ),
-                                ),
-                                class_name="stat-card",
-                            ),
-                            rx.box(
-                                rx.vstack(
-                                    rx.text("Vendas hoje", class_name="muted"),
                                     rx.text(
-                                        State.dashboard_total_vendas,
-                                        class_name="stat-card-number",
+                                        f"{State.dashboard_total_vendas} vendas hoje",
+                                        class_name="stat-card-label",
                                     ),
                                 ),
                                 class_name="stat-card",
@@ -2050,22 +2365,38 @@ def dashboard_page() -> rx.Component:
                             rx.box(
                                 rx.vstack(
                                     rx.text(
-                                        "Produtos abaixo do mínimo",
-                                        class_name="muted",
+                                        State.dashboard_itens_vendidos,
+                                        class_name="stat-card-number",
                                     ),
+                                    rx.text(
+                                        "Itens vendidos hoje",
+                                        class_name="stat-card-label",
+                                    ),
+                                ),
+                                class_name="stat-card",
+                            ),
+                            rx.box(
+                                rx.vstack(
                                     rx.text(
                                         State.dashboard_estoque_critico.length(),
                                         class_name="stat-card-number",
                                     ),
+                                    rx.text(
+                                        "Produtos abaixo do mínimo",
+                                        class_name="stat-card-label",
+                                    ),
                                 ),
                                 class_name="stat-card",
                             ),
                             rx.box(
                                 rx.vstack(
-                                    rx.text("Funcionários ativos", class_name="muted"),
                                     rx.text(
                                         State.dashboard_funcionarios_ativos,
                                         class_name="stat-card-number",
+                                    ),
+                                    rx.text(
+                                        "Funcionários ativos",
+                                        class_name="stat-card-label",
                                     ),
                                 ),
                                 class_name="stat-card",
@@ -2139,8 +2470,16 @@ def customer_list() -> rx.Component:
             rx.text("Telefone", class_name="customer-table-heading"),
             rx.text("E-mail", class_name="customer-table-heading"),
             rx.text("Endereço", class_name="customer-table-heading"),
-            rx.text("Ações", class_name="customer-table-heading"),
-            class_name="customer-table-head",
+            rx.cond(
+                State.is_gestor,
+                rx.fragment(),
+                rx.text("Ações", class_name="customer-table-heading"),
+            ),
+            class_name=rx.cond(
+                State.is_gestor,
+                "customer-table-head customer-table-head-readonly",
+                "customer-table-head",
+            ),
         ),
         rx.foreach(
             State.clientes,
@@ -2158,23 +2497,36 @@ def customer_list() -> rx.Component:
                     rx.cond(customer["email"] != "", customer["email"], "—"),
                     class_name="customer-table-cell",
                 ),
-                rx.text("—", class_name="customer-table-cell"),
-                rx.hstack(
-                    rx.button(
-                        "Editar",
-                        on_click=lambda: State.edit_customer(customer["id"]),
-                        class_name="customer-edit-button",
-                    ),
-                    rx.button(
-                        "Remover",
-                        on_click=lambda: State.deactivate_customer_by_id(
-                            customer["id"]
-                        ),
-                        class_name="customer-remove-button",
-                    ),
-                    spacing="2",
+                rx.text(
+                    rx.cond(customer["endereco"] != "", customer["endereco"], "—"),
+                    class_name="customer-table-cell",
                 ),
-                class_name="customer-table-row",
+                rx.cond(
+                    State.is_gestor,
+                    rx.fragment(),
+                    rx.hstack(
+                        rx.button(
+                            "Editar",
+                            on_click=lambda: State.edit_customer(customer["id"]),
+                            class_name="customer-edit-button",
+                        ),
+                        rx.button(
+                            "Inativar",
+                            on_click=lambda: State.deactivate_customer_by_id(
+                                customer["id"]
+                            ),
+                            class_name="customer-remove-button",
+                        ),
+                        spacing="2",
+                        justify="center",
+                        width="100%",
+                    ),
+                ),
+                class_name=rx.cond(
+                    State.is_gestor,
+                    "customer-table-row customer-table-row-readonly",
+                    "customer-table-row",
+                ),
             ),
         ),
         width="100%",
@@ -2247,40 +2599,55 @@ def customer_form() -> rx.Component:
     return rx.box(
         rx.vstack(
             rx.heading(
-                rx.cond(State.cliente_id != "", "Editar Cliente", "Novo Cliente"),
+                rx.cond(State.cliente_id != "", "Editar cliente", "Novo cliente"),
                 size="5",
+                class_name="customer-modal-title",
             ),
+            rx.text("Nome", class_name="customer-form-label"),
             rx.input(
                 placeholder="Nome",
                 value=State.cliente_nome,
                 on_change=lambda value: State.set_customer_field("cliente_nome", value),
+                class_name="customer-personal-field",
             ),
+            rx.text("CPF", class_name="customer-form-label"),
             rx.input(
                 placeholder="CPF",
                 value=State.cliente_cpf,
                 on_change=lambda value: State.set_customer_field("cliente_cpf", value),
+                max_length=11,
+                type="text",
+                class_name="customer-personal-field",
             ),
+            rx.text("Data de nascimento", class_name="customer-form-label"),
             rx.input(
                 placeholder="Data de nascimento (AAAA-MM-DD)",
                 value=State.cliente_data_nascimento,
                 on_change=lambda value: State.set_customer_field(
                     "cliente_data_nascimento", value
                 ),
+                class_name="customer-personal-field",
             ),
+            rx.text("Telefone", class_name="customer-form-label"),
             rx.input(
                 placeholder="Telefone",
                 value=State.cliente_telefone,
                 on_change=lambda value: State.set_customer_field(
                     "cliente_telefone", value
                 ),
+                type="tel",
+                class_name="customer-personal-field",
             ),
+            rx.text("E-mail", class_name="customer-form-label"),
             rx.input(
                 placeholder="E-mail",
                 value=State.cliente_email,
                 on_change=lambda value: State.set_customer_field("cliente_email", value),
+                type="email",
+                class_name="customer-personal-field",
             ),
             rx.vstack(
-                rx.heading("Endereços", size="4"),
+                rx.heading("Endereços", size="4", class_name="customer-address-title"),
                 rx.foreach(State.cliente_enderecos, customer_address_fields),
                 rx.button("Adicionar endereço", on_click=State.add_customer_address, class_name="secondary-button"),
                 width="100%",
@@ -2289,8 +2656,8 @@ def customer_form() -> rx.Component:
             rx.hstack(
                 rx.cond(
                     State.cliente_id != "",
-                    rx.button("Atualizar", on_click=State.update_customer),
-                    rx.button("Cadastrar", on_click=State.create_customer),
+                    rx.button("Salvar", on_click=State.update_customer, class_name="primary-button"),
+                    rx.button("Cadastrar", on_click=State.create_customer, class_name="primary-button"),
                 ),
                 rx.button(
                     "Cancelar",
@@ -2299,14 +2666,15 @@ def customer_form() -> rx.Component:
                 ),
                 spacing="3",
                 wrap="wrap",
+                justify="start",
             ),
             feedback_message(),
             id="cliente-form",
             width="100%",
             spacing="3",
-            class_name="form-modal-card",
+            class_name="form-modal-card customer-modal-card",
         ),
-        class_name="form-modal-backdrop",
+        class_name="form-modal-backdrop customer-modal-backdrop",
     )
 
 
@@ -2411,13 +2779,9 @@ def customers_page() -> rx.Component:
             ),
             customer_list(),
             rx.cond(
-                State.is_gestor,
+                State.cliente_form_aberto,
+                customer_form(),
                 rx.fragment(),
-                rx.cond(
-                    State.cliente_form_aberto,
-                    customer_form(),
-                    rx.fragment(),
-                ),
             ),
             feedback_message(),
             width="100%",
@@ -2433,7 +2797,8 @@ def employee_list() -> rx.Component:
             rx.text("CPF", class_name="employee-table-heading"),
             rx.text("Telefone", class_name="employee-table-heading"),
             rx.text("Salário", class_name="employee-table-heading"),
-            rx.text("Usuário", class_name="employee-table-heading"),
+            rx.text("E-mail", class_name="employee-table-heading"),
+            rx.text("Endereço", class_name="employee-table-heading"),
             rx.text("", class_name="employee-table-heading"),
             class_name="employee-table-head",
         ),
@@ -2446,7 +2811,22 @@ def employee_list() -> rx.Component:
                     rx.text(employee["cpf"], class_name="employee-table-cell"),
                     rx.text(employee["telefone"], class_name="employee-table-cell"),
                     rx.text(employee["salario"], class_name="employee-table-cell"),
-                    rx.text(employee["usuario"], class_name="employee-table-cell"),
+                    rx.text(
+                        rx.cond(
+                            employee["email"] != "",
+                            employee["email"],
+                            "—",
+                        ),
+                        class_name="employee-table-cell",
+                    ),
+                    rx.text(
+                        rx.cond(
+                            employee["endereco"] != "",
+                            employee["endereco"],
+                            "",
+                        ),
+                        class_name="employee-table-cell",
+                    ),
                     rx.hstack(
                         rx.button(
                             "Editar",
@@ -2454,11 +2834,19 @@ def employee_list() -> rx.Component:
                             class_name="employee-edit-button",
                         ),
                         rx.button(
-                            "Remover",
+                            rx.cond(
+                                employee["situacao"] == "ativo",
+                                "Inativar",
+                                "Reativar",
+                            ),
                             on_click=lambda: State.request_deactivate_employee_by_id(
                                 employee["id"]
                             ),
-                            class_name="employee-remove-button",
+                            class_name=rx.cond(
+                                employee["situacao"] == "ativo",
+                                "employee-remove-button",
+                                "employee-activate-button",
+                            ),
                         ),
                         spacing="2",
                     ),
@@ -2478,6 +2866,7 @@ def employee_form() -> rx.Component:
         rx.heading(
             rx.cond(State.funcionario_editando, "Editar funcionário", "Novo funcionário"),
             size="6",
+            class_name="employee-modal-title",
         ),
         rx.text("Nome completo", class_name="employee-form-label"),
         rx.input(
@@ -2492,6 +2881,8 @@ def employee_form() -> rx.Component:
             on_change=lambda value: State.set_employee_field(
                 "funcionario_cpf", value
             ),
+            max_length=11,
+            type="text",
         ),
         rx.text("Telefone", class_name="employee-form-label"),
         rx.input(
@@ -2522,6 +2913,52 @@ def employee_form() -> rx.Component:
                 "funcionario_salario", value
             ),
         ),
+        rx.cond(
+            State.funcionario_editando,
+            rx.fragment(),
+            rx.vstack(
+                rx.text(
+                    "Login inicial",
+                    class_name="employee-form-label initial-access-label",
+                ),
+                rx.input(
+                    value=State.funcionario_login,
+                    on_change=lambda value: State.set_employee_field(
+                        "funcionario_login", value
+                    ),
+                    class_name="initial-access-field",
+                ),
+                rx.text(
+                    "Senha inicial",
+                    class_name="employee-form-label initial-access-label",
+                ),
+                rx.box(
+                    rx.input(
+                        value=State.funcionario_senha_inicial,
+                        on_change=State.set_initial_employee_password,
+                        type=rx.cond(
+                            State.funcionario_senha_inicial_visivel,
+                            "text",
+                            "password",
+                        ),
+                        class_name="initial-access-field initial-password-field",
+                    ),
+                    rx.button(
+                        rx.cond(
+                            State.funcionario_senha_inicial_visivel,
+                            "Ocultar",
+                            "Mostrar",
+                        ),
+                        on_click=State.toggle_initial_employee_password,
+                        type="button",
+                        class_name="initial-password-toggle",
+                    ),
+                    class_name="initial-password-wrapper",
+                ),
+                width="100%",
+                spacing="2",
+            ),
+        ),
         rx.hstack(
             rx.button(
                 "Salvar",
@@ -2533,16 +2970,10 @@ def employee_form() -> rx.Component:
                 on_click=State.close_employee_modal,
                 class_name="secondary-button",
             ),
-        ),
-        rx.cond(
-            State.acesso_inicial != {},
-            rx.vstack(
-                rx.text("Login inicial: ", State.acesso_inicial["login"]),
-                rx.text(
-                    "Senha inicial: ", State.acesso_inicial["senha_inicial"]
-                ),
-            ),
-            rx.fragment(),
+            spacing="3",
+            width="100%",
+            justify="start",
+            margin_top="0.35rem",
         ),
         width="100%",
         spacing="3",
@@ -2555,18 +2986,43 @@ def employee_form() -> rx.Component:
 def employee_remove_modal() -> rx.Component:
     return rx.box(
         rx.vstack(
-            rx.heading("Remover funcionário?", size="6"),
-            rx.text(
-                "Tem certeza que deseja remover ",
-                rx.text(State.funcionario_nome, as_="span", class_name="strong"),
-                "? Essa ação não pode ser desfeita.",
-                class_name="employee-remove-message",
+            rx.heading(
+                rx.cond(
+                    State.funcionario_ativo,
+                    "Inativar funcionário?",
+                    "Reativar funcionário?",
+                ),
+                size="5",
+                class_name="employee-remove-title",
+            ),
+            rx.cond(
+                State.funcionario_ativo,
+                rx.text(
+                    "Tem certeza que deseja inativar ",
+                    rx.text(State.funcionario_nome, as_="span", class_name="strong"),
+                    "? Essa ação não pode ser desfeita.",
+                    class_name="employee-remove-message",
+                ),
+                rx.text(
+                    "Tem certeza que deseja reativar ",
+                    rx.text(State.funcionario_nome, as_="span", class_name="strong"),
+                    "?",
+                    class_name="employee-remove-message",
+                ),
             ),
             rx.hstack(
                 rx.button(
-                    "Remover",
+                    rx.cond(
+                        State.funcionario_ativo,
+                        "Inativar",
+                        "Reativar",
+                    ),
                     on_click=State.deactivate_employee,
-                    class_name="employee-confirm-remove-button",
+                    class_name=rx.cond(
+                        State.funcionario_ativo,
+                        "employee-confirm-remove-button",
+                        "employee-activate-button",
+                    ),
                 ),
                 rx.button(
                     "Cancelar",
@@ -2587,13 +3043,12 @@ def employees_page() -> rx.Component:
     return protected_layout(
         rx.vstack(
             rx.hstack(
-                rx.heading("Equipe", size="7", class_name="employee-page-title"),
                 rx.button(
                     "Adicionar funcionário",
                     on_click=State.open_new_employee,
                     class_name="new-employee-button",
                 ),
-                justify="between",
+                justify="start",
                 align_items="center",
                 width="100%",
             ),
@@ -2617,47 +3072,53 @@ def employees_page() -> rx.Component:
 
 def supplier_list() -> rx.Component:
     return rx.vstack(
-        section_heading(
-            "Fornecedores",
-            "Parceiros cadastrados e prazo de entrega.",
-            "supplier-section-heading",
-        ),
         rx.box(
-            rx.text("Fornecedor", class_name="supplier-table-heading"),
-            rx.text("CNPJ", class_name="supplier-table-heading"),
-            rx.text("Telefone", class_name="supplier-table-heading"),
-            rx.text("Prazo", class_name="supplier-table-heading"),
-            rx.text("Ações", class_name="supplier-table-heading"),
-            class_name="supplier-table-head",
-        ),
-        rx.foreach(
-            State.fornecedores,
-            lambda supplier: rx.box(
-                rx.text(supplier["nome"], class_name="table-cell strong"),
-                rx.text(supplier["cnpj"], class_name="table-cell"),
-                rx.text(supplier["telefone"], class_name="table-cell"),
-                rx.text(supplier["prazo_entrega"], class_name="supplier-deadline"),
-                rx.hstack(
-                    rx.button(
-                        "Editar",
-                        on_click=lambda: State.edit_supplier(supplier["id"]),
-                        class_name="employee-edit-button",
-                    ),
-                    rx.button(
-                        "Remover",
-                        on_click=lambda: State.request_delete_supplier_by_id(
-                            supplier["id"]
-                        ),
-                        class_name="danger-button supplier-action-button",
-                    ),
-                    spacing="2",
-                ),
-                class_name="supplier-table-row",
-                width="100%",
+            section_heading(
+                "Fornecedores",
+                "Parceiros cadastrados e prazo de entrega.",
+                "supplier-section-heading",
             ),
+            rx.box(
+                rx.text("Fornecedor", class_name="supplier-table-heading"),
+                rx.text("CNPJ", class_name="supplier-table-heading"),
+                rx.text("Telefone", class_name="supplier-table-heading"),
+                rx.text("Prazo", class_name="supplier-table-heading"),
+                rx.text("Ações", class_name="supplier-table-heading"),
+                class_name="supplier-table-head",
+            ),
+            rx.foreach(
+                State.fornecedores,
+                lambda supplier: rx.box(
+                    rx.text(supplier["nome"], class_name="table-cell strong"),
+                    rx.text(supplier["cnpj"], class_name="table-cell"),
+                    rx.text(supplier["telefone"], class_name="table-cell"),
+                    rx.text(supplier["prazo_entrega"], class_name="supplier-deadline"),
+                    rx.hstack(
+                        rx.button(
+                            "Editar",
+                            on_click=lambda: State.edit_supplier(supplier["id"]),
+                            class_name="employee-edit-button",
+                        ),
+                        rx.button(
+                            "Remover",
+                            on_click=lambda: State.request_delete_supplier_by_id(
+                                supplier["id"]
+                            ),
+                            class_name="employee-remove-button supplier-action-button",
+                        ),
+                        spacing="2",
+                        justify="center",
+                    ),
+                    class_name="supplier-table-row",
+                    width="100%",
+                ),
+            ),
+            class_name="content-card supplier-list-card",
+            width="100%",
         ),
-        class_name="content-card",
         width="100%",
+        spacing="0",
+        class_name="supplier-list",
     )
 
 
@@ -2671,6 +3132,7 @@ def supplier_form() -> rx.Component:
                     "Novo fornecedor",
                 ),
                 size="6",
+                class_name="supplier-modal-title",
             ),
             rx.text("Nome", class_name="supplier-form-label"),
             rx.input(
@@ -2740,7 +3202,11 @@ def supplier_form() -> rx.Component:
 def supplier_remove_modal() -> rx.Component:
     return rx.box(
         rx.vstack(
-            rx.heading("Remover fornecedor?", size="6"),
+            rx.heading(
+                "Remover fornecedor?",
+                size="5",
+                class_name="supplier-remove-title",
+            ),
             rx.text(
                 "Tem certeza que deseja remover ",
                 rx.text(
@@ -2749,12 +3215,13 @@ def supplier_remove_modal() -> rx.Component:
                     class_name="strong",
                 ),
                 "? Essa ação não pode ser desfeita.",
+                class_name="supplier-remove-message",
             ),
             rx.hstack(
                 rx.button(
                     "Remover",
                     on_click=State.delete_supplier,
-                    class_name="danger-button",
+                    class_name="employee-confirm-remove-button",
                 ),
                 rx.button(
                     "Cancelar",
@@ -2777,17 +3244,12 @@ def suppliers_page() -> rx.Component:
             State.is_gestor,
             rx.vstack(
                 rx.hstack(
-                    page_header(
-                        "Fornecedores",
-                        "Consulte os fornecedores cadastrados.",
-                        "page-title supplier-page-title",
-                    ),
                     rx.button(
                         "Adicionar fornecedor",
                         on_click=State.open_new_supplier,
                         class_name="new-supplier-button",
                     ),
-                    justify="between",
+                    justify="end",
                     align_items="center",
                     width="100%",
                 ),
@@ -2819,7 +3281,11 @@ def account_page() -> rx.Component:
             rx.box(
                 rx.vstack(
                     page_header("Minha conta", "Atualize suas credenciais de acesso."),
-                    rx.text("Usuário: ", State.login),
+                    rx.text(
+                        "Usuário: ",
+                        State.login,
+                        class_name="account-username",
+                    ),
                     rx.input(
                         placeholder="Novo login",
                         value=State.novo_login,
@@ -2911,8 +3377,9 @@ def product_form() -> rx.Component:
     return rx.box(
     rx.vstack(
         rx.heading(
-            rx.cond(State.produto_editando, "Editar produto", "Novo(a) produto"),
+            rx.cond(State.produto_editando, "Editar produto", "Novo produto"),
             size="6",
+            class_name="product-modal-title",
         ),
         rx.text("Nome", class_name="product-form-label"),
         rx.input(
@@ -2958,30 +3425,19 @@ def product_form() -> rx.Component:
                 "produto_estoque_minimo", value
             ),
         ),
-        rx.checkbox(
-            "Medicamento controlado (exige receita)",
-            checked=State.produto_controlado,
-            on_change=State.set_product_controlled,
-        ),
-        rx.text("Fornecedor", class_name="product-form-label"),
-        rx.select.root(
-            rx.select.trigger(
-                placeholder="Selecione um fornecedor",
-                width="100%",
+        rx.hstack(
+            rx.checkbox(
+                checked=State.produto_controlado,
+                on_change=State.set_product_controlled,
+                class_name="product-controlled-checkbox",
+                aria_label="Medicamento controlado",
             ),
-            rx.select.content(
-                rx.foreach(
-                    State.fornecedores,
-                    lambda supplier: rx.select.item(
-                        supplier["nome"] + " (" + supplier["cnpj"] + ")",
-                        value=supplier["id"],
-                    ),
-                ),
+            rx.text(
+                "Medicamento controlado (exige receita)",
+                class_name="product-controlled-label",
             ),
-            value=State.produto_fornecedor_id,
-            on_change=State.set_product_supplier,
-            disabled=State.fornecedores.length() == 0,
-            width="100%",
+            align_items="center",
+            spacing="2",
         ),
         rx.hstack(
             rx.button(
@@ -3210,6 +3666,16 @@ def sales_page() -> rx.Component:
 
 
 GLOBAL_STYLE = {
+    "@keyframes feedback-disappear": {
+        "0%, 80%": {
+            "opacity": "1",
+            "visibility": "visible",
+        },
+        "100%": {
+            "opacity": "0",
+            "visibility": "hidden",
+        },
+    },
     "body": {
         "margin": "0",
         "background": "radial-gradient(900px 500px at 0% 0%, rgba(20,184,166,0.22), transparent 60%), linear-gradient(160deg, #020808, #04110f)",
@@ -3239,6 +3705,19 @@ GLOBAL_STYLE = {
         "border": "1px solid #17332f",
         "border_radius": "10px",
         "background": "rgba(255,255,255,0.04)",
+        "color": "#ffffff",
+    },
+    "input::placeholder, textarea::placeholder": {
+        "color": "#ffffff",
+        "opacity": "1",
+    },
+    ".rt-TextFieldRoot input": {
+        "color": "#ffffff",
+    },
+    ".rt-SelectTrigger, .rt-SelectTrigger *": {
+        "color": "#ffffff",
+    },
+    ".rt-SelectContent, .rt-SelectContent *": {
         "color": "#ffffff",
     },
     ".login-page": {
@@ -3571,11 +4050,27 @@ GLOBAL_STYLE = {
         "padding": "0.75rem 1rem",
         "border_radius": "10px",
         "font_size": "0.85rem",
+        "width": "100%",
+        "box_sizing": "border-box",
+        "text_align": "left",
+        "animation": "feedback-disappear 5s forwards",
     },
     ".feedback-error": {
-        "background": "#fcebea",
-        "color": "#a32d2d",
-        "border": "1px solid #f2b8b5",
+        "background": "#a91d2d",
+        "color": "#ffffff",
+        "border": "1px solid #ef4444",
+        "box_shadow": "0 8px 20px rgba(169,29,45,0.28)",
+    },
+    ".feedback-error *": {
+        "color": "#ffffff",
+    },
+    ".feedback-success": {
+        "background": "#0b8277",
+        "color": "#ffffff",
+        "border": "1px solid #14b8a6",
+    },
+    ".feedback-success *": {
+        "color": "#ffffff",
     },
     ".app-shell": {
         "width": "100%",
@@ -3654,10 +4149,251 @@ GLOBAL_STYLE = {
     ".page-title": {"color": "#0a4e3d", "margin_bottom": "0.15rem"},
     ".supplier-page-title": {"color": "#48b6b8"},
     ".dashboard-page": {
-        "padding_top": "1rem",
+        "max_width": "860px",
+        "margin": "0 auto",
+        "padding_top": "1.5rem",
     },
     ".dashboard-section-title": {
         "color": "#ffffff",
+    },
+    ".products-page-title": {
+        "color": "#ffffff",
+        "font_size": "1.25rem",
+    },
+    ".new-product-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.7rem 1.25rem",
+        "border_radius": "0.75rem",
+        "background": "#0b8277",
+        "color": "#ffffff",
+        "font_size": "0.9rem",
+        "font_weight": "700",
+        "box_shadow": "0 0 18px rgba(20,184,166,0.3)",
+    },
+    ".products-card": {
+        "max_width": "920px",
+        "width": "100%",
+        "padding": "1.25rem 1.75rem",
+        "border_radius": "1.35rem",
+    },
+    ".product-table-head, .product-table-row": {
+        "display": "grid",
+        "grid_template_columns": "1.45fr 1.35fr 0.9fr 1fr 9.5rem",
+        "gap": "1rem",
+        "align_items": "center",
+        "justify_items": "center",
+        "width": "100%",
+        "box_sizing": "border-box",
+        "min_width": "47rem",
+    },
+    ".product-table-head": {
+        "padding": "0.9rem 0.75rem 0.55rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".product-table-row": {
+        "padding": "0.75rem 0.75rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".product-table-row:last-child": {
+        "border_bottom": "none",
+    },
+    ".product-table-heading": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "font_weight": "700",
+        "width": "100%",
+        "text_align": "center",
+    },
+    ".product-table-cell": {
+        "color": "#ffffff",
+        "font_size": "0.82rem",
+        "width": "100%",
+        "text_align": "center",
+    },
+    ".product-table-row > :nth-child(4)": {
+        "display": "flex",
+        "justify_content": "center",
+        "align_items": "center",
+        "width": "100%",
+    },
+    ".product-edit-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.38rem 0.75rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "0.55rem",
+        "background": "transparent",
+        "color": "#ffffff",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+    },
+    ".product-remove-button": {
+        "padding": "0.38rem 0.75rem",
+        "border": "1px solid #ef4b55",
+        "border_radius": "0.55rem",
+        "background": "#ef4b55",
+        "color": "#ffffff",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+    },
+    ".product-modal-backdrop": {
+        "position": "fixed",
+        "inset": "0",
+        "z_index": "30",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1rem",
+        "box_sizing": "border-box",
+        "background": "rgba(0,8,8,0.82)",
+        "backdrop_filter": "blur(5px)",
+    },
+    ".product-modal": {
+        "width": "100%",
+        "max_width": "23.5rem",
+        "padding": "1.5rem 1.35rem 1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "gap": "0.75rem",
+    },
+    ".product-modal-title": {
+        "color": "#ffffff",
+        "font_size": "1.05rem",
+    },
+    ".product-form-label": {
+        "color": "#9fb8b4",
+        "font_size": "0.72rem",
+        "margin_bottom": "-0.35rem",
+    },
+    ".product-modal input, .product-modal .rt-SelectTrigger": {
+        "width": "100%",
+        "min_height": "2.25rem",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+        "appearance": "none",
+    },
+    ".product-modal .rt-TextFieldRoot": {
+        "width": "100%",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "box_shadow": "none",
+        "outline": "none",
+        "overflow": "hidden",
+    },
+    ".product-modal .rt-TextFieldRoot:focus-within": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".product-modal input:focus": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".product-controlled-checkbox": {
+        "color": "#ffffff",
+        "font_size": "0.78rem",
+        "align_items": "center",
+        "gap": "0.45rem",
+    },
+    ".product-controlled-label": {
+        "color": "#ffffff",
+        "font_size": "0.78rem",
+        "line_height": "1.2",
+    },
+    ".product-controlled-checkbox, .product-controlled-checkbox span": {
+        "color": "#ffffff",
+    },
+    ".product-controlled-checkbox .rt-CheckboxRoot": {
+        "width": "1rem",
+        "height": "1rem",
+        "min_width": "1rem",
+        "min_height": "1rem",
+        "padding": "0",
+        "border": "1px solid #14b8a6",
+        "border_radius": "0.25rem",
+        "background": "transparent",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".product-controlled-checkbox .rt-CheckboxRoot[data-state='checked']": {
+        "background": "#14b8a6",
+        "border_color": "#14b8a6",
+    },
+    ".product-controlled-checkbox .rt-CheckboxIndicator": {
+        "color": "#071412",
+    },
+    ".dashboard-stats": {
+        "display": "grid",
+        "grid_template_columns": "repeat(4, minmax(0, 1fr))",
+        "gap": "0.75rem",
+        "width": "100%",
+    },
+    ".stat-card": {
+        "min_height": "7.25rem",
+        "display": "flex",
+        "align_items": "center",
+        "box_sizing": "border-box",
+        "padding": "1.15rem 1.1rem",
+        "border": "1px solid #17332f",
+        "border_radius": "0.75rem",
+        "background": "#091515",
+        "box_shadow": "0 12px 24px rgba(0,0,0,0.16)",
+    },
+    ".stat-card-number": {
+        "color": "#38aee8",
+        "font_size": "1.55rem",
+        "font_weight": "800",
+        "line_height": "1.15",
+    },
+    ".stat-card-label": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "margin_top": "0.35rem",
+    },
+    ".stock-alert-head, .stock-alert-row": {
+        "display": "grid",
+        "grid_template_columns": "2.1fr 1.1fr 1fr 1fr",
+        "gap": "0.75rem",
+        "align_items": "center",
+        "width": "100%",
+        "box_sizing": "border-box",
+    },
+    ".stock-alert-head": {
+        "padding": "0.9rem 0.75rem 0.55rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".stock-alert-row": {
+        "padding": "0.65rem 0.75rem",
+        "border_bottom": "1px solid rgba(23,51,47,0.65)",
+    },
+    ".stock-alert-row:last-child": {
+        "border_bottom": "none",
+    },
+    ".stock-alert-head .table-heading": {
+        "text_align": "left",
+    },
+    ".stock-alert-row .table-cell": {
+        "text_align": "left",
+    },
+    ".stock-alert-row .stock-critical": {
+        "color": "#ff6262",
+    },
+    ".stock-alert-row .status-badge-danger": {
+        "justify_self": "start",
+        "color": "#ff7a7a",
+        "background": "#5a151a",
+        "border": "1px solid #8f252d",
     },
     ".content-card": {
         "padding": "1.25rem",
@@ -3714,6 +4450,13 @@ GLOBAL_STYLE = {
         "font_size": "0.8rem",
     },
     ".attendance-card .rt-SelectTrigger": {"width": "100%"},
+    ".attendance-card, .attendance-card *": {
+        "color": "#ffffff",
+    },
+    ".attendance-card input::placeholder": {
+        "color": "#ffffff",
+        "opacity": "1",
+    },
     ".attendance-card button": {"padding": "0.45rem 0.9rem", "font_size": "0.9rem"},
     ".table-heading": {
         "color": "#8fb0ab",
@@ -3755,7 +4498,11 @@ GLOBAL_STYLE = {
         "border_bottom": "1px solid #17332f",
     },
     ".sales-table-head .table-heading, .sales-table-row .table-cell": {
-        "text_align": "left",
+        "text_align": "center",
+    },
+    ".sales-table-head > :nth-child(1), .sales-table-row > :nth-child(1), .sales-table-head > :nth-child(2), .sales-table-row > :nth-child(2), .sales-table-head > :nth-child(3), .sales-table-row > :nth-child(3), .sales-table-head > :nth-child(4), .sales-table-row > :nth-child(4)": {
+        "justify_self": "center",
+        "text_align": "center",
     },
     ".sales-table-head > :nth-child(5), .sales-table-row > :nth-child(5)": {
         "justify_self": "center",
@@ -3795,15 +4542,106 @@ GLOBAL_STYLE = {
     },
     ".form-modal-card": {
         "width": "100%",
-        "max_width": "31.5rem",
+        "max_width": "22.5rem",
         "max_height": "calc(100vh - 2rem)",
         "overflow_y": "auto",
-        "padding": "1.5rem 1.35rem 1.25rem",
+        "padding": "1.25rem",
         "border": "1px solid #14b8a6",
         "border_radius": "1.1rem",
         "background": "#071412",
         "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
-        "gap": "0.9rem",
+        "gap": "0.95rem",
+        "box_sizing": "border-box",
+    },
+    ".form-modal-card, .form-modal-card *": {
+        "color": "#ffffff",
+    },
+    ".account-username": {
+        "color": "#ffffff",
+        "font_weight": "700",
+    },
+    ".customer-modal-title": {
+        "color": "#ffffff",
+        "font_size": "1.05rem",
+        "margin_bottom": "0.15rem",
+    },
+    ".customer-modal-card": {
+        "max_width": "22.5rem",
+        "padding": "1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "margin": "0 auto",
+    },
+    ".customer-modal-card > *": {
+        "width": "100%",
+        "text_align": "left",
+    },
+    ".customer-form-label": {
+        "color": "#9fb8b4",
+        "font_size": "0.72rem",
+        "margin_bottom": "-0.35rem",
+        "text_align": "left",
+        "align_self": "flex-start",
+    },
+    ".customer-personal-field": {
+        "width": "100%",
+        "height": "2.25rem",
+        "min_height": "2.25rem",
+        "box_sizing": "border-box",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "padding": "0 0.75rem",
+        "font_size": "0.82rem",
+        "line_height": "2.25rem",
+        "text_align": "left",
+        "vertical_align": "middle",
+        "outline": "none",
+        "pointer_events": "auto",
+        "cursor": "text",
+    },
+    ".customer-personal-field:focus": {
+        "border": "1px solid #14b8a6",
+        "outline": "none",
+        "box_shadow": "0 0 0 1px rgba(20,184,166,0.25)",
+    },
+    ".customer-address-title": {
+        "color": "#ffffff",
+        "font_size": "0.95rem",
+    },
+    ".form-modal-card input": {
+        "width": "100%",
+        "box_sizing": "border-box",
+        "min_height": "2.25rem",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+        "appearance": "none",
+    },
+    ".form-modal-card input:focus": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".form-modal-card .rt-TextFieldRoot": {
+        "width": "100%",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "box_shadow": "none",
+        "outline": "none",
+        "overflow": "hidden",
+    },
+    ".form-modal-card .rt-TextFieldRoot:focus-within": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
     },
     ".product-list-container": {
         "display": "grid",
@@ -4069,6 +4907,239 @@ GLOBAL_STYLE = {
         "padding": "0.4rem 0.8rem",
         "box_shadow": "none",
     },
+    ".employee-card": {
+        "max_width": "1100px",
+        "width": "100%",
+        "padding": "1.5rem 2rem",
+        "border_radius": "1.35rem",
+    },
+    ".employee-table-head, .employee-table-row": {
+        "display": "grid",
+        "grid_template_columns": "1.35fr 1.15fr 1.15fr 1fr 1.55fr 1.55fr 9.5rem",
+        "gap": "1.25rem",
+        "align_items": "center",
+        "width": "100%",
+        "box_sizing": "border-box",
+        "min_width": "48rem",
+    },
+    ".employee-table-head": {
+        "padding": "0.9rem 0.75rem 0.55rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".employee-table-row": {
+        "padding": "0.75rem 0.75rem",
+        "border_bottom": "1px solid #17332f",
+    },
+    ".employee-table-row:last-child": {
+        "border_bottom": "none",
+    },
+    ".employee-table-heading": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "font_weight": "700",
+        "text_align": "center",
+    },
+    ".employee-table-cell": {
+        "color": "#ffffff",
+        "font_size": "0.82rem",
+        "text_align": "center",
+    },
+    ".employee-table-head > :nth-child(1), .employee-table-row > :nth-child(1), .employee-table-head > :nth-child(2), .employee-table-row > :nth-child(2), .employee-table-head > :nth-child(3), .employee-table-row > :nth-child(3), .employee-table-head > :nth-child(4), .employee-table-row > :nth-child(4), .employee-table-head > :nth-child(5), .employee-table-row > :nth-child(5), .employee-table-head > :nth-child(6), .employee-table-row > :nth-child(6)": {
+        "justify_self": "center",
+        "text_align": "center",
+    },
+    ".employee-edit-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.38rem 0.75rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "0.55rem",
+        "background": "transparent",
+        "color": "#ffffff",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+    },
+    ".employee-remove-button": {
+        "padding": "0.38rem 0.75rem",
+        "border": "1px solid #ef4b55",
+        "border_radius": "0.55rem",
+        "background": "#ef4b55",
+        "color": "#ffffff",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+    },
+    ".employee-activate-button": {
+        "padding": "0.38rem 0.75rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "0.55rem",
+        "background": "#0b8277",
+        "color": "#ffffff",
+        "font_size": "0.72rem",
+        "font_weight": "700",
+    },
+    ".new-employee-button": {
+        "display": "inline-flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "0.7rem 1.25rem",
+        "border_radius": "0.75rem",
+        "background": "#0b8277",
+        "color": "#ffffff",
+        "font_size": "0.9rem",
+        "font_weight": "700",
+        "box_shadow": "0 0 18px rgba(20,184,166,0.3)",
+    },
+    ".employee-modal-backdrop": {
+        "position": "fixed",
+        "inset": "0",
+        "z_index": "30",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1rem",
+        "box_sizing": "border-box",
+        "background": "rgba(0,8,8,0.82)",
+        "backdrop_filter": "blur(5px)",
+    },
+    ".employee-modal": {
+        "width": "100%",
+        "max_width": "26rem",
+        "max_height": "calc(100vh - 2rem)",
+        "overflow_y": "auto",
+        "padding": "1.5rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "gap": "0.65rem",
+        "box_sizing": "border-box",
+    },
+    ".employee-modal-title": {
+        "color": "#ffffff",
+        "font_size": "1.05rem",
+        "margin_bottom": "0.15rem",
+    },
+    ".employee-modal input": {
+        "width": "100%",
+        "box_sizing": "border-box",
+        "min_height": "2.55rem",
+        "height": "2.55rem",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+        "appearance": "none",
+    },
+    ".employee-modal input:focus": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".employee-modal .rt-TextFieldRoot": {
+        "width": "100%",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "box_shadow": "none",
+        "outline": "none",
+        "overflow": "hidden",
+    },
+    ".employee-modal .rt-TextFieldRoot:focus-within": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".employee-form-label": {
+        "color": "#9fb8b4",
+        "font_size": "0.72rem",
+        "margin_bottom": "-0.15rem",
+    },
+    ".initial-access-label": {
+        "color": "#9fb8b4",
+        "font_weight": "500",
+    },
+    ".initial-access-field": {
+        "width": "100%",
+        "height": "2.55rem",
+        "min_height": "2.55rem",
+        "box_sizing": "border-box",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "padding": "0 0.75rem",
+        "font_size": "0.82rem",
+        "line_height": "2.25rem",
+        "text_align": "left",
+        "outline": "none",
+        "pointer_events": "auto",
+        "cursor": "text",
+    },
+    ".initial-password-wrapper": {
+        "position": "relative",
+        "width": "100%",
+    },
+    ".initial-password-field": {
+        "padding_right": "5rem",
+    },
+    ".initial-password-toggle": {
+        "position": "absolute",
+        "right": "0.35rem",
+        "top": "50%",
+        "transform": "translateY(-50%)",
+        "height": "1.55rem",
+        "min_height": "1.55rem",
+        "padding": "0 0.45rem",
+        "border": "0",
+        "border_radius": "0.45rem",
+        "background": "#0b8277",
+        "color": "#ffffff",
+        "font_size": "0.65rem",
+        "font_weight": "700",
+    },
+    ".employee-remove-modal": {
+        "width": "100%",
+        "max_width": "23.5rem",
+        "min_height": "0",
+        "padding": "1.35rem 1.25rem",
+        "border": "1px solid #ef4b55",
+        "border_radius": "1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(239,75,85,0.24)",
+        "box_sizing": "border-box",
+    },
+    ".employee-remove-title": {
+        "color": "#ef4b55",
+        "font_size": "1.05rem",
+        "margin": "0",
+    },
+    ".employee-remove-message": {
+        "max_width": "19rem",
+        "color": "#ef4b55",
+        "font_size": "0.78rem",
+        "line_height": "1.45",
+        "text_align": "center",
+    },
+    ".employee-remove-message .strong": {
+        "color": "#ef4b55",
+    },
+    ".employee-remove-modal .employee-confirm-remove-button": {
+        "background": "#ffffff",
+        "border": "1px solid #ef4b55",
+        "color": "#ef4b55",
+    },
+    ".employee-confirm-remove-button": {
+        "background": "#ef4b55",
+        "border": "1px solid #ef4b55",
+        "color": "#ffffff",
+        "padding": "0.55rem 1.1rem",
+        "border_radius": "0.65rem",
+        "font_weight": "700",
+        "box_shadow": "none",
+    },
     ".stock-card": {
         "padding": "1.25rem 1.75rem",
         "border_radius": "1.35rem",
@@ -4171,6 +5242,17 @@ GLOBAL_STYLE = {
         "color": "#8fb0ab",
         "font_size": "0.75rem",
         "font_weight": "700",
+        "text_align": "center",
+    },
+    ".supplier-list-card": {
+        "max_width": "860px",
+        "margin": "0 auto",
+        "padding": "1.25rem 1.75rem",
+        "border_radius": "1.35rem",
+    },
+    ".supplier-list": {
+        "width": "100%",
+        "align_items": "center",
     },
     ".supplier-table-head > :nth-child(-n+3), .supplier-table-row > :nth-child(-n+3)": {
         "text_align": "center",
@@ -4211,6 +5293,94 @@ GLOBAL_STYLE = {
         "white_space": "nowrap",
         "box_shadow": "0 0 18px rgba(20,184,166,0.3)",
     },
+    ".supplier-modal-backdrop": {
+        "position": "fixed",
+        "inset": "0",
+        "z_index": "30",
+        "display": "flex",
+        "align_items": "center",
+        "justify_content": "center",
+        "padding": "1rem",
+        "box_sizing": "border-box",
+        "background": "rgba(0,8,8,0.82)",
+        "backdrop_filter": "blur(5px)",
+    },
+    ".supplier-modal": {
+        "width": "100%",
+        "max_width": "22.5rem",
+        "max_height": "calc(100vh - 2rem)",
+        "overflow_y": "auto",
+        "padding": "1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1.1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "gap": "0.65rem",
+        "box_sizing": "border-box",
+    },
+    ".supplier-modal-title": {
+        "color": "#ffffff",
+        "font_size": "1.05rem",
+        "margin_bottom": "0.15rem",
+    },
+    ".supplier-form-label": {
+        "color": "#9fb8b4",
+        "font_size": "0.72rem",
+        "margin_bottom": "-0.35rem",
+    },
+    ".supplier-modal input": {
+        "width": "100%",
+        "box_sizing": "border-box",
+        "min_height": "2.25rem",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "color": "#ffffff",
+        "box_shadow": "none",
+        "outline": "none",
+        "appearance": "none",
+    },
+    ".supplier-modal input:focus": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".supplier-modal .rt-TextFieldRoot": {
+        "width": "100%",
+        "border": "0",
+        "border_radius": "0.7rem",
+        "background": "#10221f",
+        "box_shadow": "none",
+        "outline": "none",
+        "overflow": "hidden",
+    },
+    ".supplier-modal .rt-TextFieldRoot:focus-within": {
+        "border": "0",
+        "box_shadow": "none",
+        "outline": "none",
+    },
+    ".supplier-remove-modal": {
+        "width": "100%",
+        "max_width": "23.5rem",
+        "padding": "1.35rem 1.25rem",
+        "border": "1px solid #14b8a6",
+        "border_radius": "1rem",
+        "background": "#071412",
+        "box_shadow": "0 0 35px rgba(20,184,166,0.28)",
+        "box_sizing": "border-box",
+    },
+    ".supplier-remove-title": {
+        "color": "#ffffff",
+        "font_size": "1.05rem",
+        "margin": "0",
+    },
+    ".supplier-remove-message": {
+        "max_width": "19rem",
+        "color": "#9fb8b4",
+        "font_size": "0.78rem",
+        "line_height": "1.45",
+        "text_align": "center",
+    },
     ".customer-table-head, .customer-table-row": {
         "display": "grid",
         "grid_template_columns": "1.35fr 1fr 1.1fr 1.4fr 1.35fr 1.7fr",
@@ -5976,6 +7146,24 @@ GLOBAL_STYLE = {
     ".supplier-table-head > :nth-child(4), .supplier-table-row > :nth-child(4)": {
         "justify_self": "center",
         "text_align": "center",
+    },
+    ".customer-table-heading": {
+        "color": "#8fb0ab",
+        "font_size": "0.78rem",
+        "font_weight": "700",
+        "text_align": "center",
+    },
+    ".customer-table-cell": {
+        "color": "#ffffff",
+        "font_size": "0.82rem",
+        "text_align": "center",
+    },
+    ".customer-table-head > *, .customer-table-row > *": {
+        "justify_self": "center",
+        "text_align": "center",
+    },
+    ".customer-table-head-readonly, .customer-table-row-readonly": {
+        "grid_template_columns": "1.35fr 1fr 1.1fr 1.4fr 1.35fr",
     },
 }
 

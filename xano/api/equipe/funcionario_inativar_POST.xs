@@ -23,6 +23,7 @@ query "equipe/funcionario/{id}/inativar" verb=POST {
         "email",
         "cargo",
         "salario",
+        "endereco",
         "data_admissao"
       ]
     } as $funcionario_existente

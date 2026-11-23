@@ -21,6 +21,7 @@ query "equipe/funcionarios" verb=GET {
         "email",
         "cargo",
         "salario",
+        "endereco",
         "data_admissao"
       ]
     } as $funcionarios

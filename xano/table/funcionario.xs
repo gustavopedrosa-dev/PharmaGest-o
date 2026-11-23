@@ -10,6 +10,7 @@ table funcionario {
     email? email
     text? cargo
     decimal? salario
+    text? endereco
     timestamp data_admissao
   }
 

@@ -10,7 +10,9 @@ query "equipe/funcionario" verb=POST {
     email? email
     text? cargo filters=trim
     decimal? salario
+    text? endereco filters=trim
     text login filters=trim|lower
+    text? senha_inicial filters=trim
   }
 
   stack {
@@ -55,14 +57,25 @@ query "equipe/funcionario" verb=POST {
       error = "Este login já está em uso."
     }
 
-    security.create_password {
-      character_count = 12
-      require_lowercase = true
-      require_uppercase = true
-      require_digit = true
-      require_symbol = true
-      symbol_whitelist = "!@#$%"
-    } as $senha_inicial
+    var $senha_escolhida { value = null }
+
+    conditional {
+      if ($input.senha_inicial != null && $input.senha_inicial != "") {
+        var.update $senha_escolhida { value = $input.senha_inicial }
+      }
+      else {
+        security.create_password {
+          character_count = 12
+          require_lowercase = true
+          require_uppercase = true
+          require_digit = true
+          require_symbol = true
+          symbol_whitelist = "!@#$%"
+        } as $senha_gerada
+
+        var.update $senha_escolhida { value = $senha_gerada }
+      }
+    }
 
     db.transaction {
       stack {
@@ -75,6 +88,7 @@ query "equipe/funcionario" verb=POST {
             email: $input.email,
             cargo: $input.cargo,
             salario: $input.salario,
+            endereco: $input.endereco,
             data_admissao: now
           }
         } as $funcionario
@@ -83,7 +97,7 @@ query "equipe/funcionario" verb=POST {
           data = {
             id_funcionario: $funcionario.id,
             login: $input.login,
-            senha_hash: $senha_inicial,
+            senha_hash: $senha_escolhida,
             perfil_acesso: "colaborador",
             ativo: true
           }
@@ -96,7 +110,7 @@ query "equipe/funcionario" verb=POST {
     funcionario: $funcionario,
     acesso: {
       login: $input.login,
-      senha_inicial: $senha_inicial
+      senha_inicial: $senha_escolhida
     }
   }
   guid = "funcionario-post"

@@ -457,6 +457,7 @@ class ProductClientTests(unittest.TestCase):
         created, access = client.create_employee("token", {"nome": "Colaborador"})
         updated = client.update_employee("token", 4, {"nome": "Colaborador atualizado"})
         deactivated = client.deactivate_employee("token", 4)
+        activated = client.activate_employee("token", 4)
 
         self.assertEqual(
             employees[0],
@@ -467,6 +468,7 @@ class ProductClientTests(unittest.TestCase):
         self.assertEqual(access["senha_inicial"], "temporary-only")
         self.assertEqual(updated.nome, "Colaborador atualizado")
         self.assertIsNone(deactivated.salario)
+        self.assertTrue(activated.ativo)
         self.assertEqual(
             paths,
             [
@@ -474,6 +476,7 @@ class ProductClientTests(unittest.TestCase):
                 "/api:equipe/equipe/funcionario",
                 "/api:equipe/equipe/funcionario/4",
                 "/api:equipe/equipe/funcionario/4/inativar",
+                "/api:equipe/equipe/funcionario/4/ativar",
             ],
         )
 

@@ -6,6 +6,12 @@ import reflex as rx
 
 from api.xano import (
     FORBIDDEN_MESSAGE,
+    Address,
+    Customer,
+    Employee,
+    Order,
+    Product,
+    Sale,
     SESSION_EXPIRED_MESSAGE,
     XanoForbiddenError,
     XanoUnauthorizedError,
@@ -95,12 +101,17 @@ class LoginRedirectTests(unittest.TestCase):
             clientes=[],
         )
         state._redirect_if_missing_token = lambda: State._redirect_if_missing_token(state)
-        state._set_customers = lambda customers: setattr(state, "clientes", customers)
+        state._set_customers = lambda customers, *args: setattr(
+            state,
+            "clientes",
+            customers,
+        )
         state._expire_session = lambda: setattr(state, "authenticated", False)
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
             client = client_class.return_value.__enter__.return_value
             client.list_customers.return_value = []
+            client.list_addresses.return_value = []
 
             redirect = State.load_customers.fn(state)
 
@@ -115,7 +126,7 @@ class LoginRedirectTests(unittest.TestCase):
             mensagem="",
         )
         state._redirect_if_missing_token = lambda: State._redirect_if_missing_token(state)
-        state._set_customers = lambda customers: None
+        state._set_customers = lambda customers, *args: None
         state._expire_session = lambda: setattr(state, "authenticated", False)
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
@@ -133,7 +144,7 @@ class LoginRedirectTests(unittest.TestCase):
             mensagem="",
         )
         state._redirect_if_missing_token = lambda: State._redirect_if_missing_token(state)
-        state._set_customers = lambda customers: None
+        state._set_customers = lambda customers, *args: None
         state._expire_session = lambda: setattr(state, "authenticated", False)
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
@@ -218,3 +229,474 @@ class LoginRedirectTests(unittest.TestCase):
         client.list_categories.assert_called_once_with("token-teste")
         client.list_suppliers.assert_not_called()
         client.session.assert_not_called()
+
+    def test_sale_date_milliseconds_are_formatted_as_day_and_month(self) -> None:
+        formatted = State._format_sale_date("1792281036290")
+
+        self.assertRegex(formatted, r"^\d{2}/\d{2}$")
+
+    def test_customer_fields_update_state_values(self) -> None:
+        state = SimpleNamespace(
+            cliente_nome="",
+            cliente_cpf="",
+            cliente_data_nascimento="",
+            cliente_telefone="",
+            cliente_email="",
+        )
+
+        State.set_customer_field.fn(
+            state,
+            "cliente_nome",
+            "Maria Silva",
+        )
+        State.set_customer_field.fn(state, "cliente_cpf", "12345678900")
+        State.set_customer_field.fn(
+            state,
+            "cliente_data_nascimento",
+            "1990-05-20",
+        )
+        State.set_customer_field.fn(state, "cliente_telefone", "11999999999")
+        State.set_customer_field.fn(state, "cliente_email", "maria@teste.com")
+
+        self.assertEqual(state.cliente_nome, "Maria Silva")
+        self.assertEqual(state.cliente_cpf, "12345678900")
+        self.assertEqual(state.cliente_data_nascimento, "1990-05-20")
+        self.assertEqual(state.cliente_telefone, "11999999999")
+        self.assertEqual(state.cliente_email, "maria@teste.com")
+
+    def test_customer_address_is_formatted_for_table_display(self) -> None:
+        address = Address(
+            id=18,
+            id_cliente=7,
+            logradouro="Rua das Flores",
+            numero="123",
+            bairro="Centro",
+            cidade="São Paulo",
+            estado="SP",
+            cep="",
+            complemento="",
+        )
+
+        formatted = State._format_customer_address(address)
+
+        self.assertEqual(
+            formatted,
+            "Rua das Flores, 123, Centro, São Paulo, SP",
+        )
+
+    def test_customer_cpf_validation_accepts_only_valid_digits(self) -> None:
+        self.assertTrue(State._is_valid_cpf("52998224725"))
+        self.assertFalse(State._is_valid_cpf("12345678900"))
+        self.assertFalse(State._is_valid_cpf("11111111111"))
+        self.assertFalse(State._is_valid_cpf("5299822472"))
+
+    def test_employee_cpf_field_accepts_only_digits_and_11_characters(self) -> None:
+        state = SimpleNamespace(funcionario_cpf="")
+
+        State.set_employee_field.fn(
+            state,
+            "funcionario_cpf",
+            "529.982.247-25",
+        )
+
+        self.assertEqual(state.funcionario_cpf, "52998224725")
+
+    def test_employee_cpf_validation_rejects_invalid_cpf(self) -> None:
+        state = SimpleNamespace(
+            funcionario_cpf="12345678900",
+            mensagem="",
+        )
+        state._is_valid_cpf = State._is_valid_cpf
+
+        self.assertFalse(State._valid_employee_cpf(state))
+        self.assertEqual(
+            state.mensagem,
+            "Informe um CPF válido com 11 dígitos.",
+        )
+
+    def test_open_new_employee_clears_previous_address(self) -> None:
+        state = SimpleNamespace(
+            funcionario_id="",
+            funcionario_nome="",
+            funcionario_cpf="",
+            funcionario_data_nascimento="",
+            funcionario_telefone="",
+            funcionario_email="",
+            funcionario_endereco="Rua Anterior",
+            funcionario_cargo="",
+            funcionario_salario="",
+            funcionario_login="",
+            funcionario_senha_inicial="senha-anterior",
+            funcionario_senha_inicial_visivel=True,
+            acesso_inicial={"login": "anterior"},
+            funcionario_editando=True,
+            funcionario_modal_aberto=False,
+        )
+        state._clear_employee_form = lambda: State._clear_employee_form(state)
+
+        State.open_new_employee.fn(state)
+
+        self.assertEqual(state.funcionario_endereco, "")
+        self.assertFalse(state.funcionario_editando)
+        self.assertTrue(state.funcionario_modal_aberto)
+
+    def test_edit_employee_loads_only_selected_address(self) -> None:
+        state = SimpleNamespace(
+            funcionarios=[
+                {
+                    "id": "4",
+                    "nome": "Ana",
+                    "cpf": "52998224725",
+                    "telefone": "",
+                    "email": "",
+                    "endereco": "Rua Ana, 123",
+                    "cargo": "Colaborador",
+                    "salario": "R$ 2000.00",
+                },
+                {
+                    "id": "5",
+                    "nome": "Bruno",
+                    "cpf": "52998224725",
+                    "telefone": "",
+                    "email": "",
+                    "endereco": "Rua Bruno, 456",
+                    "cargo": "Colaborador",
+                    "salario": "R$ 2500.00",
+                },
+            ],
+            funcionario_endereco="",
+            mensagem="",
+            funcionario_modal_aberto=False,
+        )
+
+        State.edit_employee.fn(state, "4")
+
+        self.assertEqual(state.funcionario_endereco, "Rua Ana, 123")
+        self.assertTrue(state.funcionario_modal_aberto)
+
+    def test_employee_initial_password_is_accepted_as_custom_value(self) -> None:
+        state = SimpleNamespace(
+            funcionario_nome="Ana",
+            funcionario_cpf="52998224725",
+            funcionario_data_nascimento="",
+            funcionario_telefone="",
+            funcionario_email="",
+            funcionario_cargo="colaborador",
+            funcionario_salario="",
+            funcionario_endereco="Rua A",
+            funcionario_login="ana",
+            funcionario_senha_inicial="Ana2026!",
+        )
+
+        payload = State._employee_payload(state, include_login=True)
+
+        self.assertEqual(payload["login"], "ana")
+        self.assertEqual(payload["senha_inicial"], "Ana2026!")
+        self.assertEqual(payload["endereco"], "Rua A")
+
+    def test_employee_create_rejects_existing_cpf(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=True,
+            funcionario_cpf="52998224725",
+            funcionario_nome="Ana",
+            funcionario_login="ana",
+            funcionarios=[
+                {"id": "4", "cpf": "529.982.247-25"},
+            ],
+            mensagem="",
+        )
+        state._valid_employee_cpf = lambda: State._valid_employee_cpf(state)
+        state._is_valid_cpf = State._is_valid_cpf
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            State.create_employee.fn(state)
+
+        self.assertEqual(state.mensagem, "O CPF já está cadastrado.")
+        client_class.assert_not_called()
+
+    def test_employee_update_allows_own_cpf_and_rejects_another_employee(self) -> None:
+        state = SimpleNamespace(
+            funcionario_id="4",
+            funcionario_cpf="52998224725",
+            funcionarios=[
+                {"id": "4", "cpf": "52998224725"},
+                {"id": "5", "cpf": "11144477735"},
+            ],
+        )
+        self.assertTrue(State._valid_employee_update_cpf(state))
+
+        state.funcionario_cpf = "11144477735"
+        state.mensagem = ""
+        self.assertFalse(State._valid_employee_update_cpf(state))
+        self.assertEqual(state.mensagem, "O CPF já está cadastrado.")
+
+    def test_employee_activation_changes_status_to_active(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=True,
+            funcionario_id="4",
+            funcionario_ativo=False,
+            confirmando_inativacao=True,
+            mensagem="",
+            funcionarios=[
+                {
+                    "id": "4",
+                    "nome": "Ana",
+                    "cpf": "52998224725",
+                    "telefone": "11999999999",
+                    "email": "ana@example.com",
+                    "endereco": "Rua Ana, 123",
+                    "cargo": "Colaborador",
+                    "salario": "R$ 2000.00",
+                    "situacao": "inativo",
+                }
+            ],
+            _token="token-teste",
+        )
+        state._employee_view = lambda employee: State._employee_view(employee)
+
+        activated = Employee(
+            id=4,
+            nome="Ana",
+            cpf="52998224725",
+            data_nascimento="",
+            telefone="11999999999",
+            email="ana@example.com",
+            cargo="Colaborador",
+            salario=2000,
+            data_admissao="",
+            ativo=True,
+            endereco="Rua Ana, 123",
+        )
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client_class.return_value.activate_employee.return_value = activated
+
+            State.deactivate_employee.fn(state)
+
+        row = state.funcionarios[0]
+        self.assertTrue(state.funcionario_ativo)
+        self.assertEqual(row["situacao"], "ativo")
+        self.assertEqual(state.mensagem, "Funcionário reativado.")
+        self.assertFalse(state.confirmando_inativacao)
+
+    def test_save_employee_updates_existing_employee(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=True,
+            funcionario_editando=True,
+            funcionario_login="",
+            funcionario_nome="Ana",
+            funcionario_cpf="52998224725",
+            funcionario_id="4",
+            funcionario_data_nascimento="",
+            funcionario_telefone="11999999999",
+            funcionario_email="ana@example.com",
+            funcionario_cargo="Colaborador",
+            funcionario_salario="2000",
+            funcionario_endereco="Rua A",
+            funcionario_senha_inicial="",
+            funcionarios=[],
+            mensagem="",
+            _token="token-teste",
+        )
+        state._valid_employee_cpf = lambda: State._valid_employee_cpf(state)
+        state._is_valid_cpf = State._is_valid_cpf
+        state._valid_employee_update_cpf = (
+            lambda: State._valid_employee_update_cpf(state)
+        )
+        state._employee_payload = lambda include_login=False: State._employee_payload(
+            state,
+            include_login=include_login,
+        )
+        state._employee_view = lambda employee: State._employee_view(employee)
+        state.close_employee_modal = lambda: setattr(
+            state,
+            "funcionario_modal_aberto",
+            False,
+        )
+
+        updated_employee = Employee(
+            id=4,
+            nome="Ana",
+            cpf="52998224725",
+            data_nascimento="",
+            telefone="11999999999",
+            email="ana@example.com",
+            cargo="Colaborador",
+            salario=2000,
+            data_admissao="",
+            ativo=True,
+            endereco="Rua A",
+        )
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client_class.return_value.update_employee.return_value = updated_employee
+
+            State.save_employee.fn(state)
+
+        client_class.return_value.update_employee.assert_called_once()
+        self.assertEqual(state.mensagem, "Funcionário atualizado.")
+
+    def test_create_customer_rejects_invalid_cpf_before_xano_call(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=False,
+            cliente_cpf="12345678900",
+            mensagem="",
+        )
+        state._valid_customer_cpf = lambda: State._valid_customer_cpf(state)
+        state._is_valid_cpf = State._is_valid_cpf
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            State.create_customer.fn(state)
+
+        self.assertEqual(
+            state.mensagem,
+            "Informe um CPF válido com 11 dígitos.",
+        )
+        client_class.assert_not_called()
+
+    def test_sale_fields_update_state_values(self) -> None:
+        state = SimpleNamespace(
+            venda_produto_id="",
+            venda_quantidade="1",
+            venda_cliente_id="",
+            venda_canal="presencial",
+            venda_pagamento="dinheiro",
+            venda_receita="",
+        )
+
+        State.set_sale_field.fn(state, "venda_produto_id", "7")
+        State.set_sale_field.fn(state, "venda_quantidade", "2")
+        State.set_sale_field.fn(state, "venda_cliente_id", "9")
+        State.set_sale_field.fn(state, "venda_canal", "online")
+        State.set_sale_field.fn(state, "venda_pagamento", "pix")
+        State.set_sale_field.fn(state, "venda_receita", "123")
+
+        self.assertEqual(state.venda_produto_id, "7")
+        self.assertEqual(state.venda_quantidade, "2")
+        self.assertEqual(state.venda_cliente_id, "9")
+        self.assertEqual(state.venda_canal, "online")
+        self.assertEqual(state.venda_pagamento, "pix")
+        self.assertEqual(state.venda_receita, "123")
+
+    def test_create_sale_creates_and_confirms_order(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=False,
+            mensagem="",
+            _token="token-teste",
+            authenticated=True,
+            venda_cliente_id="",
+            venda_canal="presencial",
+            venda_pagamento="pix",
+            venda_receita="",
+            venda_itens=[{"id_produto": "7", "quantidade": "2"}],
+            venda_produto_id="",
+            venda_quantidade="1",
+        )
+        state._expire_session = lambda: setattr(state, "authenticated", False)
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client = client_class.return_value
+            client.create_order.return_value = {"pedido": {"id": 11}}
+            client.confirm_order.return_value = {"venda": {"id": 12}}
+
+            redirect = State.create_sale.fn(state)
+
+        self.assertIsNone(redirect)
+        client.create_order.assert_called_once_with(
+            "token-teste",
+            client_id=None,
+            channel="presencial",
+            items=[{"id_produto": 7, "quantidade": 2}],
+        )
+        client.confirm_order.assert_called_once_with(
+            "token-teste",
+            11,
+            "pix",
+            None,
+        )
+        self.assertEqual(state.mensagem, "Venda confirmada.")
+        self.assertEqual(state.venda_itens, [])
+
+    def test_manager_sales_show_names_instead_of_related_ids(self) -> None:
+        state = SimpleNamespace(
+            _token="token-teste",
+            is_gestor=True,
+            mensagem="",
+            vendas=[],
+            pedidos=[],
+            itens_pedido=[],
+        )
+        state._redirect_if_missing_token = lambda: None
+        state._format_sale_date = lambda value: State._format_sale_date(value)
+
+        sale = Sale(
+            id=12,
+            id_pedido=11,
+            data_venda="2026-10-17T12:00:00Z",
+            valor_total=20,
+            status="concluída",
+        )
+        order = Order(
+            id=11,
+            id_cliente=7,
+            id_funcionario=3,
+            data_pedido="2026-10-17T12:00:00Z",
+            status="concluído",
+            canal="presencial",
+        )
+        product = Product(
+            id=2,
+            id_categoria=1,
+            id_fornecedor=1,
+            nome="Dipirona",
+            descricao="",
+            codigo_barras="",
+            controlado=False,
+            preco_venda=12.5,
+            quantidade_estoque=10,
+            estoque_minimo=2,
+            ativo=True,
+        )
+        customer = Customer(
+            id=7,
+            nome="Maria Silva",
+            cpf="",
+            data_nascimento="",
+            telefone="",
+            email="",
+            data_cadastro="",
+            ativo=True,
+        )
+        employee = Employee(
+            id=3,
+            nome="Guilherme",
+            cpf="",
+            data_nascimento="",
+            telefone="",
+            email="",
+            cargo="Colaborador",
+            salario=None,
+            data_admissao="",
+            ativo=True,
+        )
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client = client_class.return_value.__enter__.return_value
+            client.list_sale_history.return_value = (
+                [sale],
+                [{"id_venda": 12, "forma_pagamento": "pix"}],
+            )
+            client.list_orders.return_value = (
+                [order],
+                [{"id_pedido": 11, "id_produto": 2, "quantidade": 1}],
+            )
+            client.list_products.return_value = [product]
+            client.list_customers.return_value = [customer]
+            client.list_employees.return_value = [employee]
+
+            redirect = State.load_sales.fn(state)
+
+        self.assertIsNone(redirect)
+        self.assertEqual(state.vendas[0]["cliente"], "Maria Silva")
+        self.assertEqual(state.vendas[0]["produtos"], "1x Dipirona")
+        self.assertEqual(state.vendas[0]["atendente"], "Guilherme")
