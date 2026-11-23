@@ -103,12 +103,18 @@ query "vendas/pedido/{id}/confirmar" verb=POST {
     conditional {
       if ($tem_controlado == true) {
         precondition (
-          $pedido.id_cliente != null &&
+          $pedido.id_cliente != null
+        ) {
+          error_type = "inputerror"
+          error = "Venda de medicamento controlado exige cliente cadastrado."
+        }
+
+        precondition (
           $input.numero_receita != null &&
           $input.numero_receita != ""
         ) {
           error_type = "inputerror"
-          error = "Venda controlada exige cliente e número da receita."
+          error = "Venda de medicamento controlado não pode ser realizada sem número da receita."
         }
 
         db.get "cliente" {

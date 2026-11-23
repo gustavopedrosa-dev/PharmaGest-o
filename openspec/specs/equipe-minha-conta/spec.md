@@ -30,6 +30,11 @@ O sistema SHALL permitir que um gestor autenticado consulte, cadastre, edite e i
 - **WHEN** um gestor solicita a saída de um funcionário
 - **THEN** o sistema mantém o funcionário e seu histórico, inativa sua conta e impede novos acessos e atendimentos
 
+#### Scenario: Gestor reativa funcionário
+
+- **WHEN** um gestor solicita a reativação de um funcionário inativo
+- **THEN** o sistema ativa novamente sua conta, permite novos acessos e mantém o histórico de pedidos
+
 ### Requirement: Acesso inicial é provisionado com segurança
 
 O sistema SHALL criar a conta do funcionário em operação atômica, armazenar somente a senha protegida por hash e entregar a senha inicial ao gestor somente no momento autorizado de provisionamento, sem persistir a senha em texto puro na resposta ou no banco.

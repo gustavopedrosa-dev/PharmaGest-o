@@ -470,14 +470,81 @@ class LoginRedirectTests(unittest.TestCase):
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
             client_class.return_value.activate_employee.return_value = activated
+            client_class.return_value.list_employees.return_value = [activated]
 
             State.deactivate_employee.fn(state)
 
+        client_class.return_value.activate_employee.assert_called_once_with(
+            "token-teste",
+            4,
+        )
+        client_class.return_value.deactivate_employee.assert_not_called()
         row = state.funcionarios[0]
         self.assertTrue(state.funcionario_ativo)
         self.assertEqual(row["situacao"], "ativo")
         self.assertEqual(state.mensagem, "Funcionário reativado.")
         self.assertFalse(state.confirmando_inativacao)
+
+    def test_employee_activation_prefers_confirmed_list_status(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=True,
+            funcionario_id="4",
+            funcionario_ativo=False,
+            confirmando_inativacao=True,
+            mensagem="",
+            funcionarios=[
+                {
+                    "id": "4",
+                    "nome": "Ana",
+                    "cpf": "52998224725",
+                    "telefone": "11999999999",
+                    "email": "ana@example.com",
+                    "endereco": "Rua Ana, 123",
+                    "cargo": "Colaborador",
+                    "salario": "R$ 2000.00",
+                    "situacao": "inativo",
+                }
+            ],
+            _token="token-teste",
+        )
+        state._employee_view = lambda employee: State._employee_view(employee)
+
+        stale_activation = Employee(
+            id=4,
+            nome="Ana",
+            cpf="52998224725",
+            data_nascimento="",
+            telefone="",
+            email="ana@example.com",
+            cargo="Colaborador",
+            salario=2000,
+            data_admissao="",
+            ativo=False,
+            endereco="Rua Ana, 123",
+        )
+        confirmed_activation = Employee(
+            id=4,
+            nome="Ana",
+            cpf="52998224725",
+            data_nascimento="",
+            telefone="",
+            email="ana@example.com",
+            cargo="Colaborador",
+            salario=2000,
+            data_admissao="",
+            ativo=True,
+            endereco="Rua Ana, 123",
+        )
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client_class.return_value.activate_employee.return_value = stale_activation
+            client_class.return_value.list_employees.return_value = [confirmed_activation]
+
+            State.deactivate_employee.fn(state)
+
+        self.assertTrue(state.funcionario_ativo)
+        self.assertEqual(state.funcionarios[0]["situacao"], "ativo")
+        self.assertEqual(state.mensagem, "Funcionário reativado.")
 
     def test_save_employee_updates_existing_employee(self) -> None:
         state = SimpleNamespace(
@@ -616,6 +683,90 @@ class LoginRedirectTests(unittest.TestCase):
         )
         self.assertEqual(state.mensagem, "Venda confirmada.")
         self.assertEqual(state.venda_itens, [])
+
+    def test_add_sale_item_displays_product_name_and_quantity(self) -> None:
+        state = SimpleNamespace(
+            venda_produto_id="7",
+            venda_quantidade="2",
+            venda_itens=[],
+            mensagem="",
+            produtos=[
+                {
+                    "id": "7",
+                    "nome": "Dipirona",
+                    "controlado": "—",
+                    "preco": "R$ 12.50",
+                }
+            ],
+        )
+
+        State.add_sale_item.fn(state)
+
+        self.assertEqual(
+            state.venda_itens,
+            [
+                {
+                    "id_produto": "7",
+                    "nome": "Dipirona",
+                    "quantidade": "2",
+                    "preco": "12.50",
+                }
+            ],
+        )
+        self.assertEqual(state.venda_produto_id, "")
+        self.assertEqual(state.venda_quantidade, "1")
+        self.assertEqual(state.mensagem, "")
+
+    def test_sale_total_sums_unit_price_by_quantity(self) -> None:
+        state = SimpleNamespace(
+            venda_itens=[
+                {"preco": "12.50", "quantidade": "2"},
+                {"preco": "8.25", "quantidade": "1"},
+            ]
+        )
+
+        total = State.venda_valor_total.fget(state)
+        state.venda_valor_total = total
+        formatted = State.venda_valor_total_brl.fget(state)
+
+        self.assertEqual(total, 33.25)
+        self.assertEqual(formatted, "R$ 33,25")
+
+    def test_controlled_sale_requires_prescription_number_before_api_calls(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=False,
+            mensagem="",
+            _token="token-teste",
+            authenticated=True,
+            venda_cliente_id="9",
+            venda_canal="presencial",
+            venda_pagamento="dinheiro",
+            venda_receita="",
+            venda_itens=[{"id_produto": "7", "quantidade": "1"}],
+            venda_produto_id="",
+            venda_quantidade="1",
+            produtos=[
+                {
+                    "id": "7",
+                    "nome": "Medicamento controlado",
+                    "controlado": "Sim",
+                }
+            ],
+        )
+
+        with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            redirect = State.create_sale.fn(state)
+
+        self.assertIsNone(redirect)
+        client_class.assert_not_called()
+        self.assertEqual(
+            state.mensagem,
+            "Venda de medicamento controlado não pode ser realizada sem número da receita.",
+        )
+        self.assertEqual(
+            state.venda_itens,
+            [{"id_produto": "7", "quantidade": "1"}],
+        )
 
     def test_manager_sales_show_names_instead_of_related_ids(self) -> None:
         state = SimpleNamespace(

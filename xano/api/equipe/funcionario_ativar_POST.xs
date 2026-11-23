@@ -36,7 +36,7 @@ query "equipe/funcionario/{id}/ativar" verb=POST {
     db.get "usuario" {
       field_name = "id_funcionario"
       field_value = $input.id
-      output = ["id"]
+      output = ["id", "perfil_acesso"]
     } as $usuario
 
     precondition ($usuario != null) {
@@ -51,6 +51,10 @@ query "equipe/funcionario/{id}/ativar" verb=POST {
     } as $usuario_ativado
   }
 
-  response = {funcionario: $funcionario_existente, ativo: true}
+  response = {
+    funcionario: $funcionario_existente,
+    ativo: true,
+    perfil_acesso: $usuario.perfil_acesso
+  }
   guid = "funcionario-ativar-post"
 }
