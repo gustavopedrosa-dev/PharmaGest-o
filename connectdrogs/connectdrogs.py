@@ -229,6 +229,20 @@ class State(rx.State):
     def dashboard_valor_total_brl(self) -> str:
         return f"R$ {self.dashboard_valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+    @rx.var
+    def venda_valor_total(self) -> float:
+        total = 0.0
+        for item in self.venda_itens:
+            try:
+                total += float(item.get("preco", "0")) * int(item["quantidade"])
+            except (TypeError, ValueError, KeyError):
+                continue
+        return total
+
+    @rx.var
+    def venda_valor_total_brl(self) -> str:
+        return f"R$ {self.venda_valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
     @rx.event
     def set_login_input(self, value: str) -> None:
         self.login_input = value
@@ -464,11 +478,24 @@ class State(rx.State):
         if any(item["id_produto"] == str(product_id) for item in self.venda_itens):
             self.mensagem = "O produto já foi adicionado ao pedido."
             return
+        product = next(
+            (
+                item
+                for item in getattr(self, "produtos", [])
+                if item["id"] == str(product_id)
+            ),
+            None,
+        )
+        if product is None:
+            self.mensagem = "Produto não encontrado."
+            return
         self.venda_itens = [
             *self.venda_itens,
             {
                 "id_produto": str(product_id),
+                "nome": product["nome"],
                 "quantidade": str(quantity),
+                "preco": product["preco"].replace("R$ ", "").replace(",", "."),
             },
         ]
         self.venda_produto_id = ""
@@ -896,8 +923,18 @@ class State(rx.State):
                 if was_active
                 else client.activate_employee(self._token, employee_id)
             )
-            updated_view = self._employee_view(employee)
-            updated_view["situacao"] = "inativo" if was_active else "ativo"
+            employees = client.list_employees(self._token)
+            persisted_employee = next(
+                (
+                    item
+                    for item in employees
+                    if item.id == employee_id
+                ),
+                employee,
+            )
+            updated_view = self._employee_view(persisted_employee)
+            confirmed_active = persisted_employee.ativo
+            updated_view["situacao"] = "ativo" if confirmed_active else "inativo"
             updated_rows = []
             for item in self.funcionarios:
                 if item["id"] == str(employee_id):
@@ -913,12 +950,19 @@ class State(rx.State):
                 else:
                     updated_rows.append(item)
             self.funcionarios = updated_rows
-            self.funcionario_ativo = not was_active
-            self.mensagem = (
-                "Funcionário inativado."
-                if was_active
-                else "Funcionário reativado."
-            )
+            self.funcionario_ativo = confirmed_active
+            if was_active:
+                self.mensagem = (
+                    "Funcionário inativado."
+                    if not confirmed_active
+                    else "Situação do funcionário atualizada."
+                )
+            else:
+                self.mensagem = (
+                    "Funcionário reativado."
+                    if confirmed_active
+                    else "Não foi possível reativar o funcionário."
+                )
             self.confirmando_inativacao = False
         except ValueError:
             self.mensagem = "Informe um ID de funcionário válido."
@@ -1205,6 +1249,21 @@ class State(rx.State):
             return None
         if not self.venda_itens:
             self.mensagem = "Adicione ao menos um item ao pedido."
+            return None
+        controlled_product_ids = {
+            str(product["id"])
+            for product in getattr(self, "produtos", [])
+            if product.get("controlado") == "Sim"
+        }
+        has_controlled_item = any(
+            item["id_produto"] in controlled_product_ids
+            for item in self.venda_itens
+        )
+        if has_controlled_item and not self.venda_receita.strip():
+            self.mensagem = (
+                "Venda de medicamento controlado não pode ser realizada "
+                "sem número da receita."
+            )
             return None
         try:
             client = XanoClient()
@@ -3553,11 +3612,19 @@ def sale_form() -> rx.Component:
         rx.foreach(
             State.venda_itens,
             lambda item: rx.text(
-                "Produto ",
-                item["id_produto"],
+                item["nome"],
                 " - Quantidade: ",
                 item["quantidade"],
             ),
+        ),
+        rx.text(
+            "Valor total: ",
+            rx.text(
+                State.venda_valor_total_brl,
+                as_="span",
+                class_name="strong",
+            ),
+            class_name="sale-total",
         ),
         rx.input(
             placeholder="ID do cliente (opcional para produtos comuns)",
@@ -3588,6 +3655,7 @@ def sale_form() -> rx.Component:
             ),
             spacing="3",
         ),
+        feedback_message(),
         width="100%",
         class_name="content-card attendance-card",
         max_width="25.25rem",
