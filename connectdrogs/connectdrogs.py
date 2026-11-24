@@ -123,6 +123,7 @@ class State(rx.State):
     acesso_inicial: dict[str, str] = {}
     confirmando_inativacao: bool = False
     funcionario_ativo: bool = True
+    funcionario_acao_pendente: str = ""
     confirmando_remocao_fornecedor: bool = False
     produto_id: str = ""
     categoria_id: str = ""
@@ -453,9 +454,14 @@ class State(rx.State):
             (item for item in self.funcionarios if item["id"] == employee_id),
             None,
         )
-        if employee is not None:
-            self.funcionario_nome = employee["nome"]
-            self.funcionario_ativo = employee["situacao"] == "ativo"
+        if employee is None:
+            self.mensagem = "Funcionário não encontrado."
+            return
+        self.funcionario_nome = employee["nome"]
+        self.funcionario_ativo = employee["situacao"] == "ativo"
+        self.funcionario_acao_pendente = (
+            "inativar" if self.funcionario_ativo else "reativar"
+        )
         self.request_deactivate_employee()
 
     def set_supplier_field(self, field: str, value: str) -> None:
@@ -914,42 +920,38 @@ class State(rx.State):
         if not self.is_gestor:
             self.mensagem = FORBIDDEN_MESSAGE
             return
+        action = self.funcionario_acao_pendente
+        if action not in {"inativar", "reativar"}:
+            self.mensagem = "Selecione uma ação válida para o funcionário."
+            return
         try:
             employee_id = int(self.funcionario_id)
             client = XanoClient()
-            was_active = self.funcionario_ativo
-            employee = (
-                client.deactivate_employee(self._token, employee_id)
-                if was_active
-                else client.activate_employee(self._token, employee_id)
+            action_method = (
+                client.deactivate_employee
+                if action == "inativar"
+                else client.activate_employee
             )
+            try:
+                employee = action_method(self._token, employee_id)
+            finally:
+                print(
+                    "[equipe] "
+                    f"id={employee_id} action={action} "
+                    f"url={client.last_request_url} "
+                    f"status={client.last_response_status} "
+                    f"body={client.last_response_body}"
+                )
             employees = client.list_employees(self._token)
-            persisted_employee = next(
-                (
-                    item
-                    for item in employees
-                    if item.id == employee_id
-                ),
-                employee,
+            listed_employee = next(
+                (item for item in employees if item.id == employee_id),
+                None,
             )
-            updated_view = self._employee_view(persisted_employee)
-            confirmed_active = persisted_employee.ativo
-            updated_view["situacao"] = "ativo" if confirmed_active else "inativo"
-            updated_rows = []
-            for item in self.funcionarios:
-                if item["id"] == str(employee_id):
-                    updated_view["endereco"] = (
-                        employee.endereco or item.get("endereco", "")
-                    )
-                    updated_view["email"] = employee.email or item.get("email", "")
-                    updated_view["telefone"] = (
-                        employee.telefone or item.get("telefone", "")
-                    )
-                    updated_view["nome"] = employee.nome or item.get("nome", "")
-                    updated_rows.append(updated_view)
-                else:
-                    updated_rows.append(item)
-            self.funcionarios = updated_rows
+            was_active = action == "inativar"
+            confirmed_active = (
+                listed_employee.ativo if listed_employee is not None else employee.ativo
+            )
+            self._set_employees(employees)
             self.funcionario_ativo = confirmed_active
             if was_active:
                 self.mensagem = (
@@ -964,6 +966,7 @@ class State(rx.State):
                     else "Não foi possível reativar o funcionário."
                 )
             self.confirmando_inativacao = False
+            self.funcionario_acao_pendente = ""
         except ValueError:
             self.mensagem = "Informe um ID de funcionário válido."
         except XanoUnauthorizedError:
@@ -990,6 +993,7 @@ class State(rx.State):
     @rx.event
     def cancel_deactivate_employee(self) -> None:
         self.confirmando_inativacao = False
+        self.funcionario_acao_pendente = ""
 
     @rx.event
     def create_customer(self) -> None:

@@ -470,6 +470,15 @@ class ProductClientTests(unittest.TestCase):
         self.assertIsNone(deactivated.salario)
         self.assertTrue(activated.ativo)
         self.assertEqual(
+            client.last_request_url,
+            "https://example.test/api:equipe/equipe/funcionario/4/ativar",
+        )
+        self.assertEqual(client.last_response_status, 200)
+        self.assertEqual(
+            client.last_response_body,
+            {"keys": ["funcionario"], "funcionario_id": 4},
+        )
+        self.assertEqual(
             paths,
             [
                 "/api:equipe/equipe/funcionarios",

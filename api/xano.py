@@ -193,6 +193,9 @@ class XanoClient:
         self.timeout = timeout
         self._transport = transport
         self._http_client: httpx.Client | None = None
+        self.last_request_url: str | None = None
+        self.last_response_status: int | None = None
+        self.last_response_body: dict[str, Any] | None = None
 
     def _new_http_client(self) -> httpx.Client:
         return httpx.Client(
@@ -227,6 +230,9 @@ class XanoClient:
         headers = dict(kwargs.pop("headers", {}))
         if token:
             headers["Authorization"] = "Bearer " + token
+        self.last_request_url = f"{self.base_url}{path}"
+        self.last_response_status = None
+        self.last_response_body = None
         try:
             if self._http_client is not None:
                 response = self._http_client.request(
@@ -246,6 +252,10 @@ class XanoClient:
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise XanoUnavailableError(UNAVAILABLE_MESSAGE) from exc
 
+        self.last_request_url = str(response.request.url)
+        self.last_response_status = response.status_code
+        self.last_response_body = self._response_body_summary(response)
+
         if response.status_code == 401:
             raise XanoUnauthorizedError(SESSION_EXPIRED_MESSAGE, 401)
         if response.status_code == 403:
@@ -264,6 +274,24 @@ class XanoClient:
         if not isinstance(payload, dict):
             raise XanoError("Resposta invÃ¡lida do Xano.", response.status_code)
         return payload
+
+    @staticmethod
+    def _response_body_summary(response: httpx.Response) -> dict[str, Any]:
+        try:
+            body = response.json()
+        except ValueError:
+            return {"body": "non-JSON response omitted"}
+        if not isinstance(body, dict):
+            return {"body_type": type(body).__name__}
+
+        summary: dict[str, Any] = {"keys": sorted(body)}
+        employee = body.get("funcionario")
+        if isinstance(employee, dict) and "id" in employee:
+            summary["funcionario_id"] = employee["id"]
+        for field in ("ativo", "perfil_acesso"):
+            if field in body:
+                summary[field] = body[field]
+        return summary
 
     def login(self, login: str, senha: str) -> tuple[str, Session]:
         try:
@@ -493,7 +521,7 @@ class XanoClient:
     def list_employees(self, token: str) -> list[Employee]:
         payload = self._request("GET", "/api:equipe/equipe/funcionarios", token)
         active_by_employee = {
-            int(item["id_funcionario"]): bool(item.get("ativo", True))
+            int(item["id_funcionario"]): self._as_bool(item.get("ativo", True))
             for item in payload.get("usuarios", [])
         }
         return [
@@ -761,9 +789,23 @@ class XanoClient:
             cargo=str(payload.get("cargo") or ""),
             salario=float(salario) if salario is not None else None,
             data_admissao=str(payload.get("data_admissao") or ""),
-            ativo=bool(payload.get("ativo", True) if active is None else active),
+            ativo=(
+                XanoClient._as_bool(payload.get("ativo", True))
+                if active is None
+                else XanoClient._as_bool(active)
+            ),
             endereco=str(payload.get("endereco") or ""),
         )
+
+    @staticmethod
+    def _as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "ativo", "yes", "sim"}
+        return bool(value)
 
     @staticmethod
     def _sale_from_payload(payload: dict[str, Any]) -> Sale:

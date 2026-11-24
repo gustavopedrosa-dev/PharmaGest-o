@@ -435,6 +435,7 @@ class LoginRedirectTests(unittest.TestCase):
             is_gestor=True,
             funcionario_id="4",
             funcionario_ativo=False,
+            funcionario_acao_pendente="reativar",
             confirmando_inativacao=True,
             mensagem="",
             funcionarios=[
@@ -453,6 +454,7 @@ class LoginRedirectTests(unittest.TestCase):
             _token="token-teste",
         )
         state._employee_view = lambda employee: State._employee_view(employee)
+        state._set_employees = lambda employees: State._set_employees(state, employees)
 
         activated = Employee(
             id=4,
@@ -469,6 +471,15 @@ class LoginRedirectTests(unittest.TestCase):
         )
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
+            client_class.return_value.last_request_url = (
+                "https://example.test/api:equipe/equipe/funcionario/4/ativar"
+            )
+            client_class.return_value.last_response_status = 200
+            client_class.return_value.last_response_body = {
+                "keys": ["ativo", "funcionario"],
+                "funcionario_id": 4,
+                "ativo": True,
+            }
             client_class.return_value.activate_employee.return_value = activated
             client_class.return_value.list_employees.return_value = [activated]
 
@@ -485,11 +496,12 @@ class LoginRedirectTests(unittest.TestCase):
         self.assertEqual(state.mensagem, "Funcionário reativado.")
         self.assertFalse(state.confirmando_inativacao)
 
-    def test_employee_activation_prefers_confirmed_list_status(self) -> None:
+    def test_employee_activation_uses_pending_action_instead_of_boolean(self) -> None:
         state = SimpleNamespace(
             is_gestor=True,
             funcionario_id="4",
-            funcionario_ativo=False,
+            funcionario_ativo=True,
+            funcionario_acao_pendente="reativar",
             confirmando_inativacao=True,
             mensagem="",
             funcionarios=[
@@ -508,26 +520,14 @@ class LoginRedirectTests(unittest.TestCase):
             _token="token-teste",
         )
         state._employee_view = lambda employee: State._employee_view(employee)
+        state._set_employees = lambda employees: State._set_employees(state, employees)
 
-        stale_activation = Employee(
+        activation_result = Employee(
             id=4,
             nome="Ana",
             cpf="52998224725",
             data_nascimento="",
-            telefone="",
-            email="ana@example.com",
-            cargo="Colaborador",
-            salario=2000,
-            data_admissao="",
-            ativo=False,
-            endereco="Rua Ana, 123",
-        )
-        confirmed_activation = Employee(
-            id=4,
-            nome="Ana",
-            cpf="52998224725",
-            data_nascimento="",
-            telefone="",
+            telefone="11999999999",
             email="ana@example.com",
             cargo="Colaborador",
             salario=2000,
@@ -537,14 +537,53 @@ class LoginRedirectTests(unittest.TestCase):
         )
 
         with patch("connectdrogs.connectdrogs.XanoClient") as client_class:
-            client_class.return_value.activate_employee.return_value = stale_activation
-            client_class.return_value.list_employees.return_value = [confirmed_activation]
+            client_class.return_value.last_request_url = (
+                "https://example.test/api:equipe/equipe/funcionario/4/ativar"
+            )
+            client_class.return_value.last_response_status = 200
+            client_class.return_value.last_response_body = {
+                "keys": ["ativo", "funcionario"],
+                "funcionario_id": 4,
+                "ativo": True,
+            }
+            client_class.return_value.activate_employee.return_value = activation_result
+            client_class.return_value.list_employees.return_value = [activation_result]
 
             State.deactivate_employee.fn(state)
 
         self.assertTrue(state.funcionario_ativo)
         self.assertEqual(state.funcionarios[0]["situacao"], "ativo")
         self.assertEqual(state.mensagem, "Funcionário reativado.")
+
+    def test_reactivation_selection_stores_pending_action(self) -> None:
+        state = SimpleNamespace(
+            is_gestor=True,
+            funcionarios=[
+                {
+                    "id": "4",
+                    "nome": "Ana",
+                    "situacao": "inativo",
+                }
+            ],
+            funcionario_id="",
+            funcionario_nome="",
+            funcionario_ativo=True,
+            funcionario_acao_pendente="",
+            confirmando_inativacao=False,
+            mensagem="",
+            request_deactivate_employee=lambda: setattr(
+                state,
+                "confirmando_inativacao",
+                True,
+            ),
+        )
+
+        State.request_deactivate_employee_by_id.fn(state, "4")
+
+        self.assertEqual(state.funcionario_id, "4")
+        self.assertEqual(state.funcionario_acao_pendente, "reativar")
+        self.assertFalse(state.funcionario_ativo)
+        self.assertTrue(state.confirmando_inativacao)
 
     def test_save_employee_updates_existing_employee(self) -> None:
         state = SimpleNamespace(
