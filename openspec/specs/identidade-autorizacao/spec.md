@@ -117,11 +117,29 @@ O sistema SHALL permitir que somente um colaborador ativo altere o próprio logi
 - **THEN** a API recusa a alteração e o Reflex apresenta a mensagem de validação
 
 ### Requirement: Reflex protege páginas e apresenta o contrato de erros HTTP
-O Reflex SHALL manter o token fora do navegador, validar sessão e perfil ao carregar páginas protegidas, mostrar navegação correspondente ao perfil e tratar respostas HTTP conforme seu significado: 401 encerra a sessão, 403 mantém a sessão e informa falta de permissão, erros 4xx de regra exibem a mensagem do backend, e 5xx ou timeout mostram indisponibilidade sem deslogar.
+O Reflex SHALL manter o token fora do navegador e validar sessão e perfil ao carregar páginas protegidas por meio de chamadas autenticadas ao recurso da página. Quando a página não fizer outra chamada protegida, o Reflex SHALL consultar a sessão. A navegação SHALL continuar carregando dados atualizados a cada entrada, mostrar opções correspondentes ao perfil e tratar respostas HTTP conforme seu significado: 401 encerra a sessão, 403 mantém a sessão e informa falta de permissão, erros 4xx de regra exibem a mensagem do backend, e 5xx ou timeout mostram indisponibilidade sem deslogar.
 
 #### Scenario: Página protegida sem sessão válida
-- **WHEN** uma página protegida é carregada sem token válido
-- **THEN** o usuário é encaminhado ao login antes de acessar o conteúdo
+- **WHEN** uma página protegida é carregada sem token no estado server-side
+- **THEN** o usuário é encaminhado ao login sem acessar o conteúdo nem fazer uma chamada desnecessária ao Xano
+
+#### Scenario: Gestor navega para uma tela protegida com dados
+- **WHEN** um gestor autenticado abre uma tela que carrega dados por uma API protegida
+- **THEN** o Reflex carrega os dados e valida a sessão e o perfil pela resposta dessa API, sem uma consulta de sessão separada antes da navegação
+- **AND** os dados da tela são atualizados nessa entrada
+
+#### Scenario: Colaborador navega para uma tela protegida com dados
+- **WHEN** um colaborador autenticado abre uma tela permitida que carrega dados por uma API protegida
+- **THEN** o Reflex carrega os dados e valida a sessão e o perfil pela resposta dessa API, sem uma consulta de sessão separada antes da navegação
+- **AND** os dados da tela são atualizados nessa entrada
+
+#### Scenario: Página protegida sem chamada de dados
+- **WHEN** uma página protegida precisa da identidade atual e não faz outra chamada protegida ao backend
+- **THEN** o Reflex consulta a sessão antes de apresentar o conteúdo
+
+#### Scenario: Token ausente, inválido ou expirado
+- **WHEN** uma chamada protegida retorna HTTP 401
+- **THEN** o Reflex limpa a sessão e encaminha o usuário ao login com a mensagem "Sessão expirada. Entre novamente."
 
 #### Scenario: Navegação por perfil
 - **WHEN** a sessão válida pertence a um gestor ou colaborador

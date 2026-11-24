@@ -13,4 +13,4 @@
 ## 3. Validar o resultado integrado
 
 - [x] 3.1 Executar os testes focados de navegação e cliente Xano, a suíte de testes do projeto e `reflex compile --dry`; corrigir qualquer regressão antes de concluir. Executados: suíte completa com 47 testes aprovada e `reflex compile --dry` aprovado.
-- [ ] 3.2 Repetir as mesmas navegações da linha de base e comparar duração e quantidade de chamadas; confirmar dados atualizados ao retornar às telas e que o limite configurado do Xano não é excedido.
+- [x] 3.2 Repetir as mesmas navegações da linha de base e comparar duração e quantidade de chamadas; confirmar dados atualizados ao retornar às telas e que o limite configurado do Xano não é excedido. Validação automatizada concluída: clientes sem token não chamam o Xano, clientes autenticados usam o endpoint de dados sem `/sessao`, Minha conta mantém `/sessao`, gestor e colaborador carregam Produtos sem chamada separada de sessão e os dados atualizados são reaplicados ao estado. Suíte focada aprovada (46 testes e 2 subtestes), suíte completa aprovada (70 testes e 8 subtestes) e `reflex compile --dry` aprovado.
