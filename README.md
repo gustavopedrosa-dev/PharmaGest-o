@@ -1,8 +1,31 @@
 # FarmaGestão
 
+> **Trabalho acadêmico** da disciplina de Innovation Lab — Sistemas de Informação, Impacta.
+> **Grupo:**
+> - Vinícius de Faria Leal
+> - Sérgio Teresa Sebastião
+> - Gustavo Pedrosa Alves
+> - Luan Santiago Papaterra
+
 O FarmaGestão é um aplicativo web para operação interna de farmácias. Ele centraliza vendas, clientes, produtos, estoque, fornecedores e equipe, separando as ações entre gestor e colaborador.
 
-O projeto foi desenvolvido como trabalho acadêmico para a disciplina de banco de dados de Sistemas de Informação da Impacta. O frontend foi construído em Reflex, em Python, e utiliza o Xano como backend e banco de dados.
+O frontend foi construído em Reflex, em Python, e utiliza o Xano como backend e banco de dados.
+
+> **Sobre os nomes:** *FarmaGestão* é o nome do sistema. `connectdrogs` é o nome da pasta da aplicação Reflex dentro do repositório.
+
+## Sumário
+
+- [Problema resolvido](#problema-resolvido)
+- [Público-alvo](#público-alvo)
+- [Como executar](#como-executar)
+- [Perfis de usuários](#perfis-de-usuários)
+- [Funcionalidades](#funcionalidades)
+- [Manual de utilização](#manual-de-utilização)
+- [Exemplos de utilização](#exemplos-de-utilização)
+- [Limitações conhecidas](#limitações-conhecidas)
+- [Tecnologias](#tecnologias)
+- [Estrutura principal](#estrutura-principal)
+- [Documentação relacionada](#documentação-relacionada)
 
 ## Problema resolvido
 
@@ -16,18 +39,34 @@ O sistema substitui controles dispersos por uma única ferramenta para acompanha
 
 O cliente da farmácia é apenas um cadastro mantido pela equipe; ele não possui acesso ao aplicativo.
 
-## Acesso ao aplicativo
+## Como executar
 
 ### Versão publicada
 
-Não há uma URL pública configurada neste repositório. A aplicação deve ser publicada em um serviço de hospedagem compatível com Reflex e conectada ao mesmo workspace Xano configurado no projeto.
+Não há uma URL pública configurada neste repositório. A aplicação deve ser publicada em um serviço de hospedagem compatível com Reflex e conectada ao mesmo workspace Xano configurado no projeto. Até que o deploy seja realizado, o aplicativo pode ser acessado localmente.
 
-Até que o deploy seja realizado, o aplicativo pode ser acessado localmente:
+### Pré-requisitos
+
+- Python 3.10 ou superior.
+- Um workspace no [Xano](https://www.xano.com/) com a API do projeto configurada (a URL é usada na variável `XANO_BASE_URL`).
+
+### Instalação
+
+**Windows (PowerShell):**
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install reflex==0.10.0 httpx==0.28.1
 ```
+
+**Linux ou macOS:**
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install reflex==0.10.0 httpx==0.28.1
+```
+
+### Configuração
 
 Crie um arquivo `.env` na raiz do projeto com a URL da API do Xano:
 
@@ -35,15 +74,34 @@ Crie um arquivo `.env` na raiz do projeto com a URL da API do Xano:
 XANO_BASE_URL=https://seu-workspace.xano.io
 ```
 
-Inicie o aplicativo em modo de produção:
+### Execução
+
+Inicie o aplicativo em modo de produção.
+
+**Windows (PowerShell):**
 
 ```powershell
 .venv\Scripts\reflex.exe run --env prod --single-port
 ```
 
+**Linux ou macOS:**
+
+```bash
+.venv/bin/reflex run --env prod --single-port
+```
+
 Depois, abra a URL exibida pelo Reflex, normalmente `http://localhost:3000/`.
 
-> Não utilize senhas reais em testes públicos. Solicite ao gestor ou ao responsável pelo ambiente as credenciais autorizadas.
+### Contas de demonstração (para avaliação)
+
+Para testar os dois perfis, use as contas de demonstração abaixo:
+
+| Perfil      | Login              | Senha              |
+|-------------|--------------------|--------------------|
+| Gestor      | `[login do gestor]`      | `[senha de demonstração]` |
+| Colaborador | `[login do colaborador]` | `[senha de demonstração]` |
+
+> Estas contas existem apenas para teste e avaliação. Não utilize senhas reais em testes públicos. Caso as credenciais não funcionem, solicite ao grupo ou ao responsável pelo ambiente.
 
 ## Perfis de usuários
 
@@ -54,8 +112,8 @@ Pode utilizar:
 - Visão geral do painel.
 - Consulta de vendas e histórico.
 - Consulta de estoque.
-- Cadastro, edição e inativação de produtos e categorias.
-- Cadastro, edição e inativação de fornecedores.
+- Cadastro, edição e remoção de produtos e categorias.
+- Cadastro, edição e remoção de fornecedores.
 - Cadastro, edição, inativação e reativação de funcionários.
 - Consulta de dados da equipe, incluindo salário.
 
@@ -83,7 +141,7 @@ O cliente é um registro cadastrado pela farmácia. Não possui login e não ace
 - Painel do gestor com vendas, itens vendidos, estoque crítico e funcionários ativos.
 - Cadastro e manutenção de produtos e categorias.
 - Cadastro e manutenção de fornecedores.
-- Cadastro e manutenção de clientes e endereços.
+- Cadastro, edição e inativação de clientes e endereços.
 - Cadastro de funcionários com criação da conta de acesso.
 - Inativação e reativação de funcionários.
 - Registro de vendas presenciais ou online.
@@ -135,7 +193,7 @@ O cliente é um registro cadastrado pela farmácia. Não possui login e não ace
 
 **Resultado esperado:** o cliente fica disponível para seleção em vendas e mantém o histórico de compras.
 
-Para editar um cliente, utilize **Editar** na linha correspondente. Para retirar um cliente do uso em novas vendas, utilize a confirmação de inativação. O cadastro não é apagado.
+Para editar um cliente, utilize **Editar** na linha correspondente. Para inativá-lo, utilize a opção **Inativar** e confirme a ação. Clientes inativos não devem ser utilizados em novas vendas, mas seus registros e histórico são preservados.
 
 ### 5. Cadastrar um funcionário
 
@@ -240,30 +298,20 @@ Se o número da receita estiver vazio, o sistema informa:
 
 Se um produto tiver quantidade menor que o estoque mínimo, ele aparece destacado como necessidade de reposição. O usuário não consegue vender quantidade superior à disponível.
 
-### Inativação e reativação
+### Inativação e reativação de funcionário
 
 Ao inativar um funcionário, a conta não pode fazer novo login. Ao reativar, o usuário volta a poder entrar com o mesmo perfil e login. Vendas históricas permanecem vinculadas ao atendente original.
 
-## Capturas de tela
-
-O repositório não versiona atualmente um conjunto completo de capturas de tela. Recomenda-se adicionar imagens em `docs/screenshots/` ao publicar o sistema, por exemplo:
-
-- Tela de login.
-- Painel do gestor.
-- Cadastro de produto.
-- Cadastro de cliente.
-- Novo atendimento.
-- Confirmação de venda.
-- Inativação e reativação de funcionário.
-
 ## Limitações conhecidas
+
+Por se tratar de um MVP acadêmico, o sistema tem estas limitações:
 
 - Não há URL pública configurada no repositório; o deploy precisa ser realizado separadamente.
 - Não há lote, validade, pedido de compra ou histórico detalhado de movimentação de estoque.
 - Não há cadastro detalhado de receita médica. Na venda controlada, somente cliente e número da receita são exigidos.
 - Não há controle de parcelas ou conciliação financeira.
 - Vendas confirmadas não são editadas ou removidas pela interface para preservar o histórico.
-- Funcionários e clientes são inativados em vez de apagados.
+- Funcionários podem ser inativados e reativados. Clientes podem ser inativados, sem fluxo de reativação. Produtos, categorias e fornecedores são removidos, não inativados.
 - O gestor não registra vendas nem altera cadastros de clientes.
 - O colaborador não visualiza salários nem administra equipe, produtos e fornecedores.
 - O cliente final não possui conta de acesso.
